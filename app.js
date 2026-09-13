@@ -1,12 +1,87 @@
 document.addEventListener('DOMContentLoaded', () => {
     setupTabs();
     setupFileUpload();
+    loadDefaultData();
     
     // Modal Close
     document.getElementById('modal-close').addEventListener('click', () => { document.getElementById('disc-modal').style.display = 'none'; });
     document.getElementById('punch-modal-close').addEventListener('click', () => { document.getElementById('punch-modal').style.display = 'none'; });
     document.getElementById('cert-modal-close').addEventListener('click', () => { document.getElementById('cert-modal').style.display = 'none'; });
+
+    // Save Data Button
+    document.getElementById('btn-save-data').addEventListener('click', exportData);
 });
+
+function exportData() {
+    if (!window.GLOBAL_MC_DATA) return;
+    const now = new Date();
+    const dateStr = now.toISOString().split('T')[0]; // YYYY-MM-DD
+    
+    // Clone and attach timestamp
+    const exportObj = {
+        updateDate: dateStr,
+        data: window.GLOBAL_MC_DATA
+    };
+
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportObj));
+    const downloadAnchorNode = document.createElement('a');
+    downloadAnchorNode.setAttribute("href", dataStr);
+    downloadAnchorNode.setAttribute("download", "data.json");
+    document.body.appendChild(downloadAnchorNode); // required for firefox
+    downloadAnchorNode.click();
+    downloadAnchorNode.remove();
+}
+
+async function loadDefaultData() {
+    try {
+        const response = await fetch('data.json');
+        if (!response.ok) return; // Silent fail if no data.json exists
+        
+        const jsonData = await response.json();
+        if (!jsonData || !jsonData.data) return;
+        
+        window.GLOBAL_MC_DATA = jsonData.data;
+        
+        const { mcData, dashGroups, matrix, sumItr, sumPunch, sumDac, sumCssc, skyData } = window.GLOBAL_MC_DATA;
+        
+        const allWeeksSet = new Set([...Object.keys(skyData.itrPlanByWeek), ...Object.keys(skyData.itrActualByWeek)]);
+        const allWeeks = Array.from(allWeeksSet).sort();
+
+        let chartLabels = [];
+        let planBar = [];
+        let actBar = [];
+        let planLine = [];
+        let actLine = [];
+        
+        let planCumSum = 0;
+        let actCumSum = 0;
+        const totalItrA = mcData.itrA.total;
+
+        for (const wk of allWeeks) {
+            chartLabels.push(formatWeekKey(wk));
+            const pVal = skyData.itrPlanByWeek[wk] || 0;
+            const aVal = skyData.itrActualByWeek[wk] || 0;
+            planBar.push(pVal);
+            actBar.push(aVal);
+            planCumSum += pVal;
+            actCumSum += aVal;
+            planLine.push(totalItrA > 0 ? (planCumSum / totalItrA * 100) : 0);
+            actLine.push(totalItrA > 0 ? (actCumSum / totalItrA * 100) : 0);
+        }
+
+        renderDashboardWidgets(mcData, dashGroups);
+        renderSummaryWidgets(mcData, sumItr, sumPunch, sumDac, sumCssc);
+        renderMatrix(matrix);
+        renderSkylineBoxes(mcData, sumItr);
+        renderSkylineChart(chartLabels, planBar, actBar, planLine, actLine);
+
+        document.getElementById('sync-status').textContent = `Default data loaded (Updated: ${jsonData.updateDate || 'N/A'})`;
+        document.getElementById('sync-dot').classList.add('synced');
+        document.getElementById('btn-save-data').style.display = 'inline-flex';
+    } catch (e) {
+        console.log("No default data.json found, waiting for upload.");
+    }
+}
 
 function setupTabs() {
     const tabBtns = document.querySelectorAll('.tab-btn');
@@ -468,7 +543,7 @@ function setupFileUpload() {
             }
 
             // Global save for Modals
-            window.GLOBAL_MC_DATA = { mcData, matrix, sumItr, sumPunch, sumDac, sumCssc, skyData, sysDescMap, globalPunchList, globalCertList };
+            window.GLOBAL_MC_DATA = { mcData, dashGroups, matrix, sumItr, sumPunch, sumDac, sumCssc, skyData, sysDescMap, globalPunchList, globalCertList };
 
             const allWeeksSet = new Set([...Object.keys(skyData.itrPlanByWeek), ...Object.keys(skyData.itrActualByWeek)]);
             const allWeeks = Array.from(allWeeksSet).sort();
@@ -510,6 +585,7 @@ function setupFileUpload() {
 
             syncStatus.textContent = 'Data updated from CMS';
             syncDot.classList.add('synced');
+            document.getElementById('btn-save-data').style.display = 'inline-flex';
 
         } catch (error) {
             console.error(error);
