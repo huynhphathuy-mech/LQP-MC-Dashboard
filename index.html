@@ -272,9 +272,21 @@
                 </div>
 
                 <div class="card full-height-card" style="padding: 0; margin-top: 1rem;">
-                    <div class="card-header" style="padding: 1rem 1.5rem; background: rgba(15,23,42,0.8); border-bottom: 1px solid rgba(255,255,255,0.05);">
-                        <span class="badge" style="background: rgba(14,165,233,0.15); color: #0ea5e9;">MC</span>
-                        <h3>Mechanical Completion — ITR-A Checksheet Status by Discipline</h3>
+                    <div class="card-header" style="padding: 1rem 1.5rem; background: rgba(15,23,42,0.8); border-bottom: 1px solid rgba(255,255,255,0.05); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+                        <div style="display: flex; align-items: center; gap: 0.8rem;">
+                            <span class="badge" style="background: rgba(14,165,233,0.15); color: #0ea5e9;">MC</span>
+                            <h3 style="margin: 0; font-size: 1.1rem;">Mechanical Completion — ITR-A Checksheet Status</h3>
+                        </div>
+                        <div class="matrix-filter-bar">
+                            <select id="filter-sys" class="filter-input dropdown">
+                                <option value="ALL">Tất cả systems</option>
+                            </select>
+                            <input type="text" id="filter-subsys" class="filter-input" placeholder="Lọc subsystem...">
+                            <input type="text" id="filter-tag" class="filter-input" placeholder="Tìm Tag / Equipment No...">
+                            <label class="filter-checkbox"><input type="checkbox" id="filter-incomplete"> Chỉ chưa xong</label>
+                            <button id="btn-export-selected" class="btn-outline">Export lựa chọn</button>
+                            <button id="btn-export-all" class="btn-primary">Export All</button>
+                        </div>
                     </div>
                     
                     <div class="table-responsive matrix-container">
@@ -319,6 +331,28 @@
                                 <tr><td colspan="28" style="text-align:center; padding: 4rem; color: #64748b; font-style:italic;">Upload Excel files to view the Discipline Matrix</td></tr>
                             </tbody>
                         </table>
+                    </div>
+                    
+                    <!-- Tag Search Results Table (Hidden by default) -->
+                    <div id="tag-results-container" style="display: none; padding: 1rem;">
+                        <div id="tag-search-info" style="color: #0ea5e9; font-weight: 500; margin-bottom: 1rem; font-size: 0.9rem;">Kết quả tìm Tag / Equipment No: 0 tag khớp</div>
+                        <div class="table-responsive">
+                            <table class="matrix-table" id="tag-table" style="width: 100%;">
+                                <thead>
+                                    <tr>
+                                        <th style="text-align: left; padding: 0.5rem 1rem;">TAG NO</th>
+                                        <th style="text-align: left; padding: 0.5rem 1rem;">EQUIPMENT / DESCRIPTION</th>
+                                        <th style="text-align: left; padding: 0.5rem 1rem;">SUBSYSTEM</th>
+                                        <th style="text-align: left; padding: 0.5rem 1rem;">DISCIPLINE</th>
+                                        <th style="text-align: center; padding: 0.5rem 1rem;">ITR-A</th>
+                                        <th style="text-align: center; padding: 0.5rem 1rem;">STATUS</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tbody-tag-results">
+                                    <!-- Populated by JS -->
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
             </div>

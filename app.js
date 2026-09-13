@@ -10,6 +10,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Save Data Button
     document.getElementById('btn-save-data').addEventListener('click', exportData);
+    
+    // Filters & Export
+    setupFilters();
 });
 
 function exportData() {
@@ -69,8 +72,8 @@ async function loadDefaultData() {
             actLine.push(totalItrA > 0 ? (actCumSum / totalItrA * 100) : 0);
         }
 
-        renderDashboardWidgets(mcData, dashGroups);
-        renderSummaryWidgets(mcData, sumItr, sumPunch, sumDac, sumCssc);
+        // Populate Filters
+        populateSysDropdown(matrix);
         renderMatrix(matrix);
         renderSkylineBoxes(mcData, sumItr);
         renderSkylineChart(chartLabels, planBar, actBar, planLine, actLine);
@@ -283,6 +286,7 @@ function setupFileUpload() {
         
         let globalPunchList = [];
         let globalCertList = [];
+        let globalTagMap = {};
 
         // Pre-fill sumItr with correctly ordered DISCIPLINES
         DISCIPLINES.forEach(d => sumItr[d] = {d:0, t:0});
@@ -347,6 +351,24 @@ function setupFileUpload() {
                             isDone = true;
                             wk = getWeekKey(compDate);
                             if (wk) skyData.itrActualByWeek[wk] = (skyData.itrActualByWeek[wk] || 0) + 1;
+                        }
+
+                        const tagNo = getValueRobust(row, ['TagNo', 'Tag No', 'EquipmentNo', 'Equipment No']);
+                        if (tagNo) {
+                            const t = String(tagNo).trim();
+                            if (!globalTagMap[t]) {
+                                globalTagMap[t] = {
+                                    tag: t,
+                                    desc: String(getValueRobust(row, ['TagDescription', 'Description', 'EquipmentDescription', 'Tag Description']) || '-').trim(),
+                                    subsys: subStr,
+                                    sys: sys,
+                                    disc: disc,
+                                    itrTotal: 0,
+                                    itrDone: 0
+                                };
+                            }
+                            globalTagMap[t].itrTotal++;
+                            if (isDone) globalTagMap[t].itrDone++;
                         }
 
                         skyData.subsysItrTotal[subStr] = (skyData.subsysItrTotal[subStr] || 0) + 1;
@@ -543,7 +565,7 @@ function setupFileUpload() {
             }
 
             // Global save for Modals
-            window.GLOBAL_MC_DATA = { mcData, dashGroups, matrix, sumItr, sumPunch, sumDac, sumCssc, skyData, sysDescMap, globalPunchList, globalCertList };
+            window.GLOBAL_MC_DATA = { mcData, dashGroups, matrix, sumItr, sumPunch, sumDac, sumCssc, skyData, sysDescMap, globalPunchList, globalCertList, globalTagMap };
 
             const allWeeksSet = new Set([...Object.keys(skyData.itrPlanByWeek), ...Object.keys(skyData.itrActualByWeek)]);
             const allWeeks = Array.from(allWeeksSet).sort();
@@ -583,6 +605,8 @@ function setupFileUpload() {
             renderSkylineBoxes(mcData, sumItr);
             renderSkylineChart(chartLabels, planBar, actBar, planLine, actLine);
 
+            populateSysDropdown(matrix);
+            
             syncStatus.textContent = 'Data updated from CMS';
             syncDot.classList.add('synced');
             document.getElementById('btn-save-data').style.display = 'inline-flex';
@@ -749,6 +773,12 @@ function renderMatrix(matrix) {
     const tbody = document.getElementById('tbody-matrix');
     if (!tbody) return;
     
+    // Get filter values
+    const sysFilter = document.getElementById('filter-sys') ? document.getElementById('filter-sys').value : 'ALL';
+    const subFilter = document.getElementById('filter-subsys') ? document.getElementById('filter-subsys').value.toLowerCase().trim() : '';
+    const incFilter = document.getElementById('filter-incomplete') ? document.getElementById('filter-incomplete').checked : false;
+    const sumCssc = window.GLOBAL_MC_DATA ? window.GLOBAL_MC_DATA.sumCssc : {};
+
     tbody.innerHTML = '';
     const systems = Object.keys(matrix).sort();
 
@@ -758,16 +788,16 @@ function renderMatrix(matrix) {
     }
 
     systems.forEach(sys => {
-        const trSys = document.createElement('tr');
-        trSys.className = 'sys-row';
-        trSys.innerHTML = `<td class="col-sys">SYSTEM ${sys}</td><td colspan="27"></td>`;
-        tbody.appendChild(trSys);
+        if (sysFilter !== 'ALL' && sys !== sysFilter) return;
+
+        let hasVisibleSubsys = false;
+        const sysFragment = document.createDocumentFragment();
 
         const subsysKeys = Object.keys(matrix[sys]).sort();
         subsysKeys.forEach(sub => {
-            const trSub = document.createElement('tr');
-            trSub.className = 'subsys-row';
-            
+            if (subFilter && !sub.toLowerCase().includes(subFilter)) return;
+
+            let isIncomplete = false;
             let html = `<td class="col-sys">${sub}</td>`;
             
             DISCIPLINES.forEach(disc => {
@@ -775,13 +805,152 @@ function renderMatrix(matrix) {
                 html += renderCell(data.i_d, data.i_t, false);
                 html += renderCell(data.pa_d, data.pa_t, true);
                 html += renderCell(data.pb_d, data.pb_t, false);
+
+                if (data.i_t > 0 && data.i_d < data.i_t) isIncomplete = true;
+                if (data.pa_t > 0 && data.pa_d < data.pa_t) isIncomplete = true;
+                if (data.pb_t > 0 && data.pb_d < data.pb_t) isIncomplete = true;
             });
             
+            if (sumCssc[sub] && sumCssc[sub].t > 0 && sumCssc[sub].d < sumCssc[sub].t) isIncomplete = true;
+            if (incFilter && !isIncomplete) return;
+
+            const trSub = document.createElement('tr');
+            trSub.className = 'subsys-row';
             trSub.innerHTML = html;
-            tbody.appendChild(trSub);
+            sysFragment.appendChild(trSub);
+            hasVisibleSubsys = true;
         });
+
+        if (hasVisibleSubsys) {
+            const trSys = document.createElement('tr');
+            trSys.className = 'sys-row';
+            trSys.innerHTML = `<td class="col-sys">SYSTEM ${sys}</td><td colspan="27"></td>`;
+            tbody.appendChild(trSys);
+            tbody.appendChild(sysFragment);
+        }
+    });
+    
+    if (tbody.children.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="28" style="text-align:center; padding: 4rem;">No matching data</td></tr>';
+    }
+}
+
+// --- FILTERING & EXPORT LOGIC ---
+function populateSysDropdown(matrix) {
+    const sel = document.getElementById('filter-sys');
+    if (!sel) return;
+    sel.innerHTML = '<option value="ALL">Tất cả systems</option>';
+    Object.keys(matrix).sort().forEach(sys => {
+        sel.innerHTML += `<option value="${sys}">System ${sys}</option>`;
     });
 }
+
+function setupFilters() {
+    const filterSys = document.getElementById('filter-sys');
+    const filterSub = document.getElementById('filter-subsys');
+    const filterInc = document.getElementById('filter-incomplete');
+    const filterTag = document.getElementById('filter-tag');
+
+    const updateView = () => {
+        if (!window.GLOBAL_MC_DATA) return;
+        const tagQ = filterTag.value.trim().toLowerCase();
+        
+        if (tagQ.length > 0) {
+            document.querySelector('.matrix-container').style.display = 'none';
+            document.getElementById('tag-results-container').style.display = 'block';
+            renderTagResults(tagQ);
+        } else {
+            document.querySelector('.matrix-container').style.display = 'block';
+            document.getElementById('tag-results-container').style.display = 'none';
+            renderMatrix(window.GLOBAL_MC_DATA.matrix);
+        }
+    };
+
+    if (filterSys) filterSys.addEventListener('change', updateView);
+    if (filterSub) filterSub.addEventListener('input', updateView);
+    if (filterInc) filterInc.addEventListener('change', updateView);
+    if (filterTag) filterTag.addEventListener('input', updateView);
+
+    // Exports
+    document.getElementById('btn-export-selected').addEventListener('click', () => exportMatrix(false));
+    document.getElementById('btn-export-all').addEventListener('click', () => exportMatrix(true));
+}
+
+function renderTagResults(q) {
+    const tbody = document.getElementById('tbody-tag-results');
+    const info = document.getElementById('tag-search-info');
+    if (!tbody || !window.GLOBAL_MC_DATA || !window.GLOBAL_MC_DATA.globalTagMap) return;
+    
+    tbody.innerHTML = '';
+    const tags = Object.values(window.GLOBAL_MC_DATA.globalTagMap).filter(t => t.tag.toLowerCase().includes(q));
+    
+    info.textContent = `Kết quả tìm Tag / Equipment No: ${tags.length} tag khớp "${q}"`;
+    
+    if (tags.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding: 2rem;">No matching tags</td></tr>';
+        return;
+    }
+    
+    // Show top 200 to prevent lagging if query is short
+    tags.slice(0, 200).forEach(t => {
+        const pct = t.itrTotal > 0 ? ((t.itrDone/t.itrTotal)*100).toFixed(0) : 0;
+        let statColor = '#ef4444';
+        if (pct === '100') statColor = '#10b981';
+        else if (pct > 0) statColor = '#f59e0b';
+        
+        tbody.innerHTML += `
+            <tr class="tag-row">
+                <td style="font-weight:600; color:#e2e8f0;">${t.tag}</td>
+                <td style="color:#cbd5e1; max-width:250px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${t.desc}">${t.desc}</td>
+                <td>${t.subsys}</td>
+                <td>${t.disc}</td>
+                <td style="text-align:center;">${t.itrDone}/${t.itrTotal}</td>
+                <td style="text-align:center;"><span style="background:rgba(255,255,255,0.1); padding:2px 6px; border-radius:4px; font-size:0.75rem; color:${statColor}">${pct}%</span></td>
+            </tr>
+        `;
+    });
+}
+
+function exportMatrix(isAll) {
+    const matrixTable = document.getElementById('matrix-table');
+    const tagTableContainer = document.getElementById('tag-results-container');
+    
+    if (tagTableContainer.style.display === 'block') {
+        exportTableToExcel('tag-table', 'LQP_Tag_Search.xlsx');
+        return;
+    }
+
+    if (isAll) {
+        // Unfilter temporarily
+        const oldSys = document.getElementById('filter-sys').value;
+        const oldSub = document.getElementById('filter-subsys').value;
+        const oldInc = document.getElementById('filter-incomplete').checked;
+        
+        document.getElementById('filter-sys').value = 'ALL';
+        document.getElementById('filter-subsys').value = '';
+        document.getElementById('filter-incomplete').checked = false;
+        
+        renderMatrix(window.GLOBAL_MC_DATA.matrix);
+        exportTableToExcel('matrix-table', 'LQP_Matrix_All.xlsx');
+        
+        // Restore
+        document.getElementById('filter-sys').value = oldSys;
+        document.getElementById('filter-subsys').value = oldSub;
+        document.getElementById('filter-incomplete').checked = oldInc;
+        renderMatrix(window.GLOBAL_MC_DATA.matrix);
+    } else {
+        exportTableToExcel('matrix-table', 'LQP_Matrix_Filtered.xlsx');
+    }
+}
+
+function exportTableToExcel(tableId, filename) {
+    const table = document.getElementById(tableId);
+    if (!table) return;
+    
+    const wb = XLSX.utils.table_to_book(table, { sheet: "Data" });
+    XLSX.writeFile(wb, filename);
+}
+
 
 function renderSkylineBoxes(mcData, sumItr) {
     const total = mcData.itrA.total;
