@@ -74,6 +74,8 @@ async function loadDefaultData() {
 
         // Populate Filters
         populateSysDropdown(matrix);
+        renderDashboardWidgets(mcData, dashGroups);
+        renderSummaryWidgets(mcData, sumItr, sumPunch, sumDac, sumCssc);
         renderMatrix(matrix);
         renderSkylineBoxes(mcData, sumItr);
         renderSkylineChart(chartLabels, planBar, actBar, planLine, actLine);
