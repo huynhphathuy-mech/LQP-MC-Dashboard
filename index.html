@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LQP - Mechanical Completion Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <!-- SheetJS for Excel Parsing -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <!-- Discipline Modal (Phase 6) -->
+    <div id="disc-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modal-title">Discipline: MECHANICAL <span style="font-size: 0.8rem; font-weight: 400; color: #94a3b8; margin-left: 10px;" id="modal-subtitle"></span></h2>
+                <button class="modal-close" id="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <!-- Top 4 Boxes -->
+                <div class="sky-top-boxes" style="margin-bottom: 1rem;">
+                    <div class="sky-top-box" style="background: #fff; color: #1e293b; border-color: #cbd5e1; text-align: left;">
+                        <div class="sky-box-title" style="color: #64748b;">ITR-A DONE</div>
+                        <div class="sky-box-val" id="mdl-itra" style="color: #0f172a;">0 / 0 <span style="font-size:1rem; color:#ef4444; font-weight:700;">0.0%</span></div>
+                    </div>
+                    <div class="sky-top-box" style="background: #fff; color: #1e293b; border-color: #cbd5e1; text-align: left;">
+                        <div class="sky-box-title" style="color: #64748b;">PUNCH A CLOSED</div>
+                        <div class="sky-box-val" id="mdl-puncha" style="color: #0f172a;">0 / 0 <span style="font-size:1rem; color:#ef4444; font-weight:700;">0.0%</span></div>
+                    </div>
+                    <div class="sky-top-box" style="background: #fff; color: #1e293b; border-color: #cbd5e1; text-align: left;">
+                        <div class="sky-box-title" style="color: #64748b;">PUNCH B CLOSED</div>
+                        <div class="sky-box-val" id="mdl-punchb" style="color: #0f172a;">0 / 0 <span style="font-size:1rem; color:#ef4444; font-weight:700;">0.0%</span></div>
+                    </div>
+                    <div class="sky-top-box" style="background: #fff; color: #1e293b; border-color: #cbd5e1; text-align: left;">
+                        <div class="sky-box-title" style="color: #64748b;">DAC (SUBSYSTEM)</div>
+                        <div class="sky-box-val" id="mdl-dac" style="color: #0f172a;">0 / 0 <span style="font-size:1rem; color:#ef4444; font-weight:700;">0.0%</span></div>
+                    </div>
+                </div>
+
+                <!-- Chart -->
+                <div class="card" style="background: #fff; margin-bottom: 1rem; border-color: #cbd5e1;">
+                    <div class="card-header" style="border-bottom: 1px solid #e2e8f0; background: #f8fafc;">
+                        <h3 style="color: #0f172a; text-align: center; width: 100%;" id="mdl-chart-title">S-Curve ITR-A</h3>
+                    </div>
+                    <div class="card-body" style="height: 300px; padding: 1rem;">
+                        <canvas id="modalChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Subsystem Table -->
+                <div class="card" style="background: #fff; border-color: #cbd5e1; margin-top: 1rem; margin-bottom: 2rem;">
+                    <div class="card-header" style="border-bottom: 1px solid #e2e8f0; background: #f8fafc;">
+                        <h3 style="color: #0f172a;" id="mdl-table-title">Tổng hợp theo Subsystem</h3>
+                    </div>
+                    <div class="card-body" style="padding: 0; overflow-x: auto;">
+                        <table class="modal-table">
+                            <thead>
+                                <tr>
+                                    <th style="width: 40px;">#</th>
+                                    <th>SYSTEM</th>
+                                    <th>SUBSYSTEM</th>
+                                    <th>DESCRIPTION</th>
+                                    <th>ITR DONE/TOTAL</th>
+                                    <th>%ITR</th>
+                                    <th>PUNCHA</th>
+                                    <th>PUNCHB</th>
+                                    <th>DAC</th>
+                                </tr>
+                            </thead>
+                            <tbody id="mdl-tbody">
+                                <!-- Populated by JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Punch Modal (Phase 7) -->
+    <div id="punch-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="punch-modal-title">Punch FAT_A <span style="font-size: 0.8rem; font-weight: 400; color: #94a3b8; margin-left: 10px;">Toàn dự án - Tất cả discipline</span></h2>
+                <button class="modal-close" id="punch-modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <!-- Top Boxes container -->
+                <div class="sky-top-boxes" id="punch-top-boxes" style="margin-bottom: 1rem; flex-wrap: wrap;">
+                    <!-- Populated dynamically -->
+                </div>
+
+                <!-- Punch Table -->
+                <div class="card" style="background: #fff; border-color: #cbd5e1; flex: 1; display: flex; flex-direction: column; overflow: hidden;">
+                    <div class="card-header" style="border-bottom: 1px solid #e2e8f0; background: #f8fafc;">
+                        <h3 style="color: #0f172a;" id="punch-table-title">Punch FAT_A</h3>
+                    </div>
+                    <div class="card-body" style="padding: 0; overflow-y: auto;">
+                        <table class="modal-table">
+                            <thead>
+                                <tr>
+                                    <th style="width: 40px;">#</th>
+                                    <th>SYSTEM</th>
+                                    <th>SUBSYSTEM</th>
+                                    <th>PUNCHNO</th>
+                                    <th>DISCIPLINE</th>
+                                    <th>PHASE</th>
+                                    <th>STATUS</th>
+                                    <th>TAGNO</th>
+                                    <th>DEFECT DESCRIPTION</th>
+                                    <th>ACTION BY</th>
+                                    <th>OPEN</th>
+                                    <th>CLOSED</th>
+                                    <th>EXPECTED</th>
+                                </tr>
+                            </thead>
+                            <tbody id="punch-tbody">
+                                <!-- Populated by JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Certificate Modal (Phase 7) -->
+    <div id="cert-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="cert-modal-title">CSSC <span style="font-size: 0.8rem; font-weight: 400; color: #94a3b8; margin-left: 10px;">Chi tiết</span></h2>
+                <button class="modal-close" id="cert-modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <!-- Cert Table -->
+                <div class="card" style="background: #fff; border-color: #cbd5e1; flex: 1; display: flex; flex-direction: column; overflow: hidden;">
+                    <div class="card-header" style="border-bottom: 1px solid #e2e8f0; background: #f8fafc;">
+                        <h3 style="color: #0f172a;" id="cert-table-title">Danh sách</h3>
+                    </div>
+                    <div class="card-body" style="padding: 0; overflow-y: auto;">
+                        <table class="modal-table">
+                            <thead>
+                                <tr>
+                                    <th style="width: 40px;">#</th>
+                                    <th>CERTIFICATE</th>
+                                    <th>DISCIPLINE</th>
+                                    <th>SYSTEM</th>
+                                    <th>SUBSYSTEM</th>
+                                    <th>STATUS</th>
+                                    <th>PLAN FINISH</th>
+                                    <th>ACTUAL FINISH</th>
+                                </tr>
+                            </thead>
+                            <tbody id="cert-tbody">
+                                <!-- Populated by JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Ambient glow -->
+    <div class="ambient-glow bg-glow-1"></div>
+    <div class="ambient-glow bg-glow-2"></div>
+
+    <div class="app-wrapper">
+        <!-- Top Navbar -->
+        <header class="app-navbar">
+            <div class="navbar-brand">
+                <div class="brand-logo">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+                    </svg>
+                </div>
+                <div>
+                    <h1>BLOCK B LQP</h1>
+                    <div class="subtitle">MECHANICAL COMPLETION DASHBOARD</div>
+                </div>
+            </div>
+            
+            <nav class="app-tabs">
+                <button class="tab-btn active" data-tab="dashboard">
+                    Project Dashboard
+                </button>
+                <button class="tab-btn" data-tab="mc">
+                    Mechanical Completion
+                </button>
+                <button class="tab-btn" data-tab="skyline">
+                    Handover and Skyline
+                </button>
+            </nav>
+
+            <div class="navbar-actions">
+                <label for="excel-upload" class="btn-sync">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="btn-icon">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                        <polyline points="17 8 12 3 7 8"></polyline>
+                        <line x1="12" y1="3" x2="12" y2="15"></line>
+                    </svg>
+                    Re-sync data
+                </label>
+                <input type="file" id="excel-upload" multiple accept=".xlsx, .xlsm" style="display: none;">
+                
+                <div class="status-indicator">
+                    <span class="pulse-dot" id="sync-dot"></span>
+                    <span id="sync-status">Upload CMS files...</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content Area -->
+        <div class="main-container">
+            <!-- TAB: Project Dashboard -->
+            <div id="tab-dashboard" class="tab-content active">
+                <div id="dash-widgets-container" class="dash-widgets-grid">
+                    <!-- Populated by JS -->
+                </div>
+            </div>
+
+            <!-- TAB: Mechanical Completion (Matrix) -->
+            <div id="tab-mc" class="tab-content">
+                
+                <!-- MC Summary Widgets (Phase 4) -->
+                <div class="mc-summary-row">
+                    <!-- Box 1: ITR-A -->
+                    <div class="mc-sum-box">
+                        <div class="mc-sum-header">ITR-A DONE (THEO DISCIPLINE)</div>
+                        <div class="mc-sum-total" id="sum-itra-total">0/0 - 0.0%</div>
+                        <div class="mc-sum-grid" id="grid-itra">
+                            <!-- Populated by JS -->
+                        </div>
+                    </div>
+                    
+                    <!-- Box 2: Punch Status -->
+                    <div class="mc-sum-box">
+                        <div class="mc-sum-header">PUNCH STATUS</div>
+                        <div class="mc-sum-total" id="sum-punch-total">0/0 - 0.0%</div>
+                        <div class="mc-sum-grid punch-grid" id="grid-punch">
+                            <!-- Populated by JS -->
+                        </div>
+                    </div>
+                    
+                    <!-- Box 3: DAC -->
+                    <div class="mc-sum-box">
+                        <div class="mc-sum-header">DAC (DISCIPLINE)</div>
+                        <div class="mc-sum-total" id="sum-dac-total">0/0 - 0.0%</div>
+                        <div class="mc-sum-grid" id="grid-dac">
+                            <!-- Populated by JS -->
+                        </div>
+                    </div>
+                    
+                    <!-- Box 4: CSSC -->
+                    <div class="mc-sum-box">
+                        <div class="mc-sum-header">CSSC (SUBSYSTEM)</div>
+                        <div class="mc-sum-total" id="sum-cssc-total">0/0 - 0.0%</div>
+                        <div class="mc-sum-grid cssc-grid" id="grid-cssc">
+                            <!-- Populated by JS -->
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card full-height-card" style="padding: 0; margin-top: 1rem;">
+                    <div class="card-header" style="padding: 1rem 1.5rem; background: rgba(15,23,42,0.8); border-bottom: 1px solid rgba(255,255,255,0.05);">
+                        <span class="badge" style="background: rgba(14,165,233,0.15); color: #0ea5e9;">MC</span>
+                        <h3>Mechanical Completion — ITR-A Checksheet Status by Discipline</h3>
+                    </div>
+                    
+                    <div class="table-responsive matrix-container">
+                        <table class="matrix-table" id="matrix-table">
+                            <thead>
+                                <!-- Top Header Row (Disciplines) -->
+                                <tr>
+                                    <th rowspan="2" class="col-sys sticky-col">SUBSYSTEM NO</th>
+                                    <th colspan="3" class="group-hdr mech">MECHANICAL</th>
+                                    <th colspan="3" class="group-hdr pipe">PIPING</th>
+                                    <th colspan="3" class="group-hdr elec">ELECTRICAL</th>
+                                    <th colspan="3" class="group-hdr inst">INSTRUMENT</th>
+                                    <th colspan="3" class="group-hdr tele">TELECOM</th>
+                                    <th colspan="3" class="group-hdr stru">STRUCTURE</th>
+                                    <th colspan="3" class="group-hdr arch">ARCHITECTURE</th>
+                                    <th colspan="3" class="group-hdr hvac">HVAC</th>
+                                    <th colspan="3" class="group-hdr safe">SAFETY</th>
+                                </tr>
+                                <!-- Sub Header Row (ITR, Punch A, Punch B) -->
+                                <tr class="sub-hdr">
+                                    <!-- MECH -->
+                                    <th class="sub-mech">ITR-A</th><th class="sub-mech">PUNCH A</th><th class="sub-mech">PUNCH B</th>
+                                    <!-- PIPE -->
+                                    <th class="sub-pipe">ITR-A</th><th class="sub-pipe">PUNCH A</th><th class="sub-pipe">PUNCH B</th>
+                                    <!-- ELEC -->
+                                    <th class="sub-elec">ITR-A</th><th class="sub-elec">PUNCH A</th><th class="sub-elec">PUNCH B</th>
+                                    <!-- INST -->
+                                    <th class="sub-inst">ITR-A</th><th class="sub-inst">PUNCH A</th><th class="sub-inst">PUNCH B</th>
+                                    <!-- TELE -->
+                                    <th class="sub-tele">ITR-A</th><th class="sub-tele">PUNCH A</th><th class="sub-tele">PUNCH B</th>
+                                    <!-- STRU -->
+                                    <th class="sub-stru">ITR-A</th><th class="sub-stru">PUNCH A</th><th class="sub-stru">PUNCH B</th>
+                                    <!-- ARCH -->
+                                    <th class="sub-arch">ITR-A</th><th class="sub-arch">PUNCH A</th><th class="sub-arch">PUNCH B</th>
+                                    <!-- HVAC -->
+                                    <th class="sub-hvac">ITR-A</th><th class="sub-hvac">PUNCH A</th><th class="sub-hvac">PUNCH B</th>
+                                    <!-- SAFE -->
+                                    <th class="sub-safe">ITR-A</th><th class="sub-safe">PUNCH A</th><th class="sub-safe">PUNCH B</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tbody-matrix">
+                                <tr><td colspan="28" style="text-align:center; padding: 4rem; color: #64748b; font-style:italic;">Upload Excel files to view the Discipline Matrix</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB: Handover and Skyline -->
+            <div id="tab-skyline" class="tab-content">
+                <div class="skyline-container">
+                    
+                    <!-- Left Sidebar: Overall & Disciplines -->
+                    <div class="sky-sidebar">
+                        <div class="card sky-side-card">
+                            <div class="sky-side-header">
+                                <span class="badge" style="background:#0ea5e9; color:#fff;">SKYLINE</span>
+                                <h3 style="margin:0; font-size:0.85rem;">Handover and Skyline</h3>
+                            </div>
+                            <div id="sky-side-list" class="sky-side-list">
+                                <!-- Populated by JS -->
+                                <div style="padding:1rem; color:#94a3b8; font-size:0.8rem; font-style:italic;">
+                                    Under construction. Data will load here.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Main Chart Area -->
+                    <div class="sky-main">
+                        <!-- Top 4 Data Boxes -->
+                        <div class="sky-top-boxes" id="sky-top-boxes">
+                            <div class="sky-top-box">
+                                <div class="sky-box-title">TOTAL ITR-A</div>
+                                <div class="sky-box-val" id="sky-val-total">0</div>
+                            </div>
+                            <div class="sky-top-box">
+                                <div class="sky-box-title">COMPLETE</div>
+                                <div class="sky-box-val" id="sky-val-comp" style="color:#10b981;">0</div>
+                            </div>
+                            <div class="sky-top-box">
+                                <div class="sky-box-title">REMAIN</div>
+                                <div class="sky-box-val" id="sky-val-rem" style="color:#ef4444;">0</div>
+                            </div>
+                            <div class="sky-top-box">
+                                <div class="sky-box-title">PROGRESS</div>
+                                <div class="sky-box-val" id="sky-val-prog">0.0%</div>
+                            </div>
+                        </div>
+                        
+                        <!-- Chart Card -->
+                        <div class="card sky-chart-card">
+                            <div class="card-header" style="text-align: center; border-bottom:none; padding-bottom: 0;">
+                                <h3 style="color:#e2e8f0; font-size:1.1rem;">ITR-A S-Curve — Overall LQP Topside (weekly · actual cumulative to today)</h3>
+                            </div>
+                            <div class="card-body" style="flex: 1; display:flex; flex-direction:column; padding-top:0.5rem; position:relative; min-height: 400px;">
+                                <canvas id="skylineChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                    
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="app.js"></script>
+</body>
+</html>
