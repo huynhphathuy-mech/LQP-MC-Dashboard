@@ -237,7 +237,8 @@ function getDashGroup(disc) {
     if (disc === 'HVAC') return 'HVAC';
     if (disc === 'SAFETY') return 'SAFETY';
     if (['ELECTRICAL', 'TELECOM', 'INSTRUMENT'].includes(disc)) return 'ETC';
-    if (['ARCHITECTURE', 'STRUCTURE'].includes(disc)) return 'ARCH_STR';
+    if (disc === 'ARCHITECTURE') return 'ARCH';
+    if (disc === 'STRUCTURE') return 'STR';
     return null;
 }
 
@@ -275,7 +276,8 @@ function setupFileUpload() {
             HVAC: initDashGroup(),
             ETC: initDashGroup(),
             SAFETY: initDashGroup(),
-            ARCH_STR: initDashGroup()
+            ARCH: initDashGroup(),
+            STR: initDashGroup()
         };
 
 
@@ -682,11 +684,18 @@ function renderDashboardWidgets(mcData, dashGroups) {
     let html = '';
     html += createWidgetHtml('OVERALL (All Disciplines)', mcData, true);
     html += createWidgetHtml('MECHANICAL', dashGroups.MECHANICAL, false);
-    html += createWidgetHtml('PIPING', dashGroups.PIPING, false);
-    html += createWidgetHtml('HVAC', dashGroups.HVAC, false);
-    html += createWidgetHtml('ELECTRICAL, TELECOM & INST', dashGroups.ETC, false);
     html += createWidgetHtml('SAFETY', dashGroups.SAFETY, false);
-    html += createWidgetHtml('ARCHITECTURE & STRUCTURE', dashGroups.ARCH_STR, false);
+    html += createWidgetHtml('HVAC', dashGroups.HVAC, false);
+    html += createWidgetHtml('PIPING', dashGroups.PIPING, false);
+    html += createWidgetHtml('ELECTRICAL, TELECOM & INST', dashGroups.ETC, false);
+    
+    // Support backward compatibility if old data.json is loaded
+    if (dashGroups.ARCH_STR) {
+        html += createWidgetHtml('ARCHITECTURE & STRUCTURE', dashGroups.ARCH_STR, false);
+    } else {
+        html += createWidgetHtml('ARCHITECTURE', dashGroups.ARCH || initDashGroup(), false);
+        html += createWidgetHtml('STRUCTURE', dashGroups.STR || initDashGroup(), false);
+    }
     
     container.innerHTML = html;
 }
