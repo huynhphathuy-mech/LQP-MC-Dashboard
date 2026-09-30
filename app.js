@@ -850,7 +850,7 @@ function renderMatrix(matrix) {
 function populateSysDropdown(matrix) {
     const sel = document.getElementById('filter-sys');
     if (!sel) return;
-    sel.innerHTML = '<option value="ALL">Tất cả systems</option>';
+    sel.innerHTML = '<option value="ALL">All systems</option>';
     Object.keys(matrix).sort().forEach(sys => {
         sel.innerHTML += `<option value="${sys}">System ${sys}</option>`;
     });
@@ -895,7 +895,7 @@ function renderTagResults(q) {
     tbody.innerHTML = '';
     const tags = Object.values(window.GLOBAL_MC_DATA.globalTagMap).filter(t => t.tag.toLowerCase().includes(q));
     
-    info.textContent = `Kết quả tìm Tag / Equipment No: ${tags.length} tag khớp "${q}"`;
+    info.textContent = `Search Results for Tag / Equipment No: ${tags.length} tags match "${q}"`;
     
     if (tags.length === 0) {
         tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding: 2rem;">No matching tags</td></tr>';
@@ -1043,8 +1043,8 @@ function openDisciplineModal(disc) {
 
     // Show modal
     document.getElementById('disc-modal').style.display = 'flex';
-    document.getElementById('modal-title').innerHTML = `Discipline: ${disc} <span style="font-size: 0.8rem; font-weight: 400; color: #94a3b8; margin-left: 10px;">Toàn dự án</span>`;
-    document.getElementById('mdl-chart-title').innerText = `S-Curve ITR-A — Toàn dự án — Discipline ${disc}`;
+    document.getElementById('modal-title').innerHTML = `Discipline: ${disc} <span style="font-size: 0.8rem; font-weight: 400; color: #94a3b8; margin-left: 10px;">Whole Project</span>`;
+    document.getElementById('mdl-chart-title').innerText = `S-Curve ITR-A — Whole Project — Discipline ${disc}`;
 
     // Calculate Modal 4 Boxes
     let itrT = 0, itrD = 0, paT = 0, paD = 0, pbT = 0, pbD = 0, dacT = 0, dacD = 0;
@@ -1178,8 +1178,8 @@ function openPunchModal(phase, catType) {
     if (!gd) return;
     
     document.getElementById('punch-modal').style.display = 'flex';
-    document.getElementById('punch-modal-title').innerHTML = `Punch ${phase}_${catType} <span style="font-size: 0.8rem; font-weight: 400; color: #94a3b8; margin-left: 10px;">Toàn dự án - Tất cả discipline</span>`;
-    document.getElementById('punch-table-title').innerText = `Punch ${phase}_${catType} (đỏ = Open • xanh = Closed)`;
+    document.getElementById('punch-modal-title').innerHTML = `Punch ${phase}_${catType} <span style="font-size: 0.8rem; font-weight: 400; color: #94a3b8; margin-left: 10px;">Whole Project - All disciplines</span>`;
+    document.getElementById('punch-table-title').innerText = `Punch ${phase}_${catType} (Red = Open • Green = Closed)`;
 
     const punches = gd.globalPunchList.filter(p => p.phase === phase && p.cat.includes(catType));
     
@@ -1202,7 +1202,7 @@ function openPunchModal(phase, catType) {
         
         const trColor = isClosed ? '#dcfce7' : '#fee2e2'; 
         tbodyHtml += `
-            <tr style="background: ${trColor}; color: #0f172a;">
+            <tr style="background: ${trColor}; color: #0f172a;" class="punch-row" data-disc="${p.disc}">
                 <td>${idx++}</td>
                 <td>${p.sys}</td>
                 <td><b>${p.subsys}</b></td>
@@ -1225,8 +1225,8 @@ function openPunchModal(phase, catType) {
     // Top Boxes
     const fPct = (d, t) => t > 0 ? ((d/t)*100).toFixed(1) + '%' : '0.0%';
     let boxesHtml = `
-        <div class="sky-top-box" style="background: #fff; color: #1e293b; border-color: #cbd5e1; text-align: left; min-width: 150px;">
-            <div class="sky-box-title" style="color: #64748b;">TẤT CẢ</div>
+        <div class="sky-top-box punch-filter-box" onclick="filterPunchTable('ALL')" style="cursor: pointer; background: #fff; color: #1e293b; border-color: #cbd5e1; text-align: left; min-width: 150px; transition: background 0.2s;" onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='#fff'">
+            <div class="sky-box-title" style="color: #64748b;">ALL</div>
             <div class="sky-box-val" style="color: #0ea5e9;">${closed} / ${total} <span style="font-size:1rem; color:#ef4444; font-weight:700;">${fPct(closed, total)}</span></div>
         </div>
     `;
@@ -1235,8 +1235,8 @@ function openPunchModal(phase, catType) {
         const v = discCount[d];
         if (v && v.t > 0) {
             boxesHtml += `
-                <div class="sky-top-box" style="background: #fff; color: #1e293b; border-color: #cbd5e1; text-align: left; min-width: 120px;">
-                    <div class="sky-box-title" style="color: #64748b;">${d.substring(0,4)}</div>
+                <div class="sky-top-box punch-filter-box" onclick="filterPunchTable('${d}')" style="cursor: pointer; background: #fff; color: #1e293b; border-color: #cbd5e1; text-align: left; min-width: 120px; transition: background 0.2s;" onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='#fff'">
+                    <div class="sky-box-title" style="color: #64748b;" title="${d}">${d.substring(0,4)}</div>
                     <div class="sky-box-val" style="color: #0f172a; font-size: 1.2rem;">${v.d} / ${v.t} <span style="font-size:0.8rem; color:#ef4444; font-weight:700;">${fPct(v.d, v.t)}</span></div>
                 </div>
             `;
@@ -1245,12 +1245,30 @@ function openPunchModal(phase, catType) {
     document.getElementById('punch-top-boxes').innerHTML = boxesHtml;
 }
 
+window.filterPunchTable = function(disc) {
+    const rows = document.querySelectorAll('#punch-tbody .punch-row');
+    let count = 0;
+    rows.forEach(r => {
+        if (disc === 'ALL' || r.getAttribute('data-disc') === disc) {
+            r.style.display = '';
+            count++;
+        } else {
+            r.style.display = 'none';
+        }
+    });
+    
+    const subTitle = document.querySelector('#punch-modal-title span');
+    if (subTitle) {
+        subTitle.innerText = disc === 'ALL' ? 'Whole Project - All disciplines' : `Whole Project - Discipline: ${disc} (${count} items)`;
+    }
+};
+
 function openCertModal(type, group) {
     const gd = window.GLOBAL_MC_DATA;
     if (!gd) return;
     
     document.getElementById('cert-modal').style.display = 'flex';
-    document.getElementById('cert-modal-title').innerHTML = `${type} ${group} <span style="font-size: 0.8rem; font-weight: 400; color: #94a3b8; margin-left: 10px;">Chi tiết</span>`;
+    document.getElementById('cert-modal-title').innerHTML = `${type} ${group} <span style="font-size: 0.8rem; font-weight: 400; color: #94a3b8; margin-left: 10px;">Details</span>`;
     
     let certs = [];
     if (type === 'DAC') {
