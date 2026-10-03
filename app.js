@@ -547,6 +547,65 @@ function setupFileUpload() {
                         }
                     });
                 }
+
+                // KPI S-CURVE
+                if (name.includes('kpi') || workbook.SheetNames.some(s => s.includes('S-Curve'))) {
+                    skyData.hasKpi = true;
+                    if (!skyData.kpiPlan) skyData.kpiPlan = {};
+                    if (!skyData.kpiAct) skyData.kpiAct = {};
+                    if (!skyData.kpiDiscPlan) skyData.kpiDiscPlan = {};
+                    if (!skyData.kpiDiscAct) skyData.kpiDiscAct = {};
+
+                    workbook.SheetNames.forEach(sheetName => {
+                        let disc = null;
+                        if (sheetName.includes('TOTAL') || sheetName.includes('OVERALL')) disc = 'OVERALL';
+                        else if (sheetName.includes('ELE')) disc = 'ELECTRICAL';
+                        else if (sheetName.includes('INS')) disc = 'INSTRUMENT';
+                        else if (sheetName.includes('TEL')) disc = 'TELECOM';
+                        else if (sheetName.includes('HVAC')) disc = 'HVAC';
+                        else if (sheetName.includes('PIP')) disc = 'PIPING';
+                        else if (sheetName.includes('MEC')) disc = 'MECHANICAL';
+                        else if (sheetName.includes('STR')) disc = 'STRUCTURE';
+                        else if (sheetName.includes('ARC')) disc = 'ARCHITECTURE';
+                        else if (sheetName.includes('SAF')) disc = 'SAFETY';
+                        
+                        if (!disc) return;
+
+                        const ws = workbook.Sheets[sheetName];
+                        const rJson = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
+                        
+                        let datesRow = null, planRow = null, actRow = null;
+                        
+                        for (let r=0; r<rJson.length; r++) {
+                            const firstCell = String(rJson[r][0] || '').trim().toUpperCase();
+                            if (firstCell === 'TYPE') datesRow = rJson[r];
+                            else if (firstCell.includes('1. KPI PLAN')) planRow = rJson[r];
+                            else if (firstCell.includes('3. ACTUAL') && !firstCell.includes('CUM')) actRow = rJson[r];
+                        }
+                        
+                        if (datesRow && planRow) {
+                            for (let c=1; c<datesRow.length; c++) {
+                                const rawDate = datesRow[c];
+                                if (!rawDate) continue;
+                                const wk = getWeekKey(rawDate);
+                                if (wk) {
+                                    const pVal = parseFloat(planRow[c]) || 0;
+                                    const aVal = actRow ? (parseFloat(actRow[c]) || 0) : 0;
+                                    
+                                    if (disc === 'OVERALL') {
+                                        skyData.kpiPlan[wk] = (skyData.kpiPlan[wk] || 0) + pVal;
+                                        skyData.kpiAct[wk] = (skyData.kpiAct[wk] || 0) + aVal;
+                                    } else {
+                                        if (!skyData.kpiDiscPlan[disc]) skyData.kpiDiscPlan[disc] = {};
+                                        if (!skyData.kpiDiscAct[disc]) skyData.kpiDiscAct[disc] = {};
+                                        skyData.kpiDiscPlan[disc][wk] = (skyData.kpiDiscPlan[disc][wk] || 0) + pVal;
+                                        skyData.kpiDiscAct[disc][wk] = (skyData.kpiDiscAct[disc][wk] || 0) + aVal;
+                                    }
+                                }
+                            }
+                        }
+                    });
+                }
             }
 
             // Skyline Data Aggregation (Map ITR-A totals to CSSC Plan weeks)
@@ -566,6 +625,14 @@ function setupFileUpload() {
                         skyData.discPlanByWeek[disc][wk] = (skyData.discPlanByWeek[disc][wk] || 0) + count;
                     }
                 }
+            }
+
+
+            if (skyData.hasKpi) {
+                skyData.itrPlanByWeek = skyData.kpiPlan || {};
+                skyData.itrActualByWeek = skyData.kpiAct || {};
+                skyData.discPlanByWeek = skyData.kpiDiscPlan || {};
+                skyData.discActualByWeek = skyData.kpiDiscAct || {};
             }
 
             // Global save for Modals
