@@ -11,18 +11,92 @@ document.addEventListener('DOMContentLoaded', () => {
     // Save Data Button
     document.getElementById('btn-save-data').addEventListener('click', exportData);
     
+    // Load data.json from computer
+    const jsonInput = document.getElementById('json-upload');
+    if (jsonInput) {
+        jsonInput.addEventListener('change', handleJsonUpload);
+    }
+
     // Filters & Export
     setupFilters();
     setupReports();
     setupFlashReport();
 });
 
+// ==========================================
+// IndexedDB Persistence for Local & Offline Use
+// ==========================================
+const DB_NAME = 'LQP_MC_Dashboard_DB';
+const DB_STORE = 'app_data';
+
+function openAppDB() {
+    return new Promise((resolve, reject) => {
+        if (!window.indexedDB) {
+            reject(new Error("IndexedDB not supported"));
+            return;
+        }
+        const req = indexedDB.open(DB_NAME, 1);
+        req.onupgradeneeded = (e) => {
+            const db = e.target.result;
+            if (!db.objectStoreNames.contains(DB_STORE)) {
+                db.createObjectStore(DB_STORE);
+            }
+        };
+        req.onsuccess = (e) => resolve(e.target.result);
+        req.onerror = (e) => reject(e.target.error);
+    });
+}
+
+async function saveToDB(key, data) {
+    try {
+        const db = await openAppDB();
+        const tx = db.transaction(DB_STORE, 'readwrite');
+        tx.objectStore(DB_STORE).put(data, key);
+        return new Promise(resolve => {
+            tx.oncomplete = () => resolve(true);
+            tx.onerror = () => resolve(false);
+        });
+    } catch (err) {
+        console.warn("IndexedDB save error:", err);
+        return false;
+    }
+}
+
+async function loadFromDB(key) {
+    try {
+        const db = await openAppDB();
+        const tx = db.transaction(DB_STORE, 'readonly');
+        const req = tx.objectStore(DB_STORE).get(key);
+        return new Promise(resolve => {
+            req.onsuccess = () => resolve(req.result);
+            req.onerror = () => resolve(null);
+        });
+    } catch (err) {
+        console.warn("IndexedDB load error:", err);
+        return null;
+    }
+}
+
+function autoPersistCurrentData() {
+    if (window.GLOBAL_MC_DATA) {
+        const now = new Date();
+        const dateStr = now.toISOString().split('T')[0];
+        saveToDB('global_mc_data', {
+            updateDate: dateStr,
+            data: window.GLOBAL_MC_DATA
+        });
+    }
+}
+
 function exportData() {
     if (!window.GLOBAL_MC_DATA) return;
     const now = new Date();
     const dateStr = now.toISOString().split('T')[0]; // YYYY-MM-DD
     
-    // Clone and attach timestamp
+    // Auto-save to local browser database
+    autoPersistCurrentData();
+
+    // Clone and attach timestamp for file export
     const exportObj = {
         updateDate: dateStr,
         data: window.GLOBAL_MC_DATA
@@ -37,19 +111,14 @@ function exportData() {
     downloadAnchorNode.remove();
 }
 
-async function loadDefaultData() {
-    try {
-        const response = await fetch('data.json');
-        if (!response.ok) return; // Silent fail if no data.json exists
-        
-        const jsonData = await response.json();
-        if (!jsonData || !jsonData.data) return;
-        
-        window.GLOBAL_MC_DATA = jsonData.data;
-        
-        const { mcData, dashGroups, matrix, sumItr, sumPunch, sumDac, sumCssc, skyData } = window.GLOBAL_MC_DATA;
-        
-        const allWeeksSet = new Set([...Object.keys(skyData.itrPlanByWeek), ...Object.keys(skyData.itrActualByWeek)]);
+function applyLoadedData(dataObj, updateDateStr) {
+    if (!dataObj) return;
+    window.GLOBAL_MC_DATA = dataObj;
+    
+    const { mcData, dashGroups, matrix, sumItr, sumPunch, sumDac, sumCssc, skyData } = window.GLOBAL_MC_DATA;
+    
+    if (skyData) {
+        const allWeeksSet = new Set([...Object.keys(skyData.itrPlanByWeek || {}), ...Object.keys(skyData.itrActualByWeek || {})]);
         const allWeeks = Array.from(allWeeksSet).sort();
 
         let chartLabels = [];
@@ -60,7 +129,7 @@ async function loadDefaultData() {
         
         let planCumSum = 0;
         let actCumSum = 0;
-        const totalItrA = mcData.itrA.total;
+        const totalItrA = (mcData && mcData.itrA) ? mcData.itrA.total : 0;
 
         for (const wk of allWeeks) {
             chartLabels.push(formatWeekKey(wk));
@@ -74,27 +143,97 @@ async function loadDefaultData() {
             actLine.push(totalItrA > 0 ? (actCumSum / totalItrA * 100) : 0);
         }
 
-        // Populate Filters
-        populateSysDropdown(matrix);
-        renderDashboardWidgets(mcData, dashGroups);
-        renderSummaryWidgets(mcData, sumItr, sumPunch, sumDac, sumCssc);
-        renderMatrix(matrix);
         renderSkylineBoxes(mcData, sumItr);
         renderSkylineChart(chartLabels, planBar, actBar, planLine, actLine);
-
-        if (window.GLOBAL_MC_DATA.globalCompletedChecksheets) {
-            initReportsUI();
-        }
-        if (window.GLOBAL_MC_DATA.globalFlashReports) {
-            renderFlashReports();
-        }
-
-        document.getElementById('sync-status').textContent = `Default data loaded (Updated: ${jsonData.updateDate || 'N/A'})`;
-        document.getElementById('sync-dot').classList.add('synced');
-        document.getElementById('btn-save-data').style.display = 'inline-flex';
-    } catch (e) {
-        console.log("No default data.json found, waiting for upload.");
     }
+
+    if (matrix) {
+        populateSysDropdown(matrix);
+        renderMatrix(matrix);
+    }
+    if (mcData && dashGroups) {
+        renderDashboardWidgets(mcData, dashGroups);
+    }
+    if (mcData && sumItr) {
+        renderSummaryWidgets(mcData, sumItr, sumPunch, sumDac, sumCssc);
+    }
+
+    if (window.GLOBAL_MC_DATA.globalCompletedChecksheets) {
+        initReportsUI();
+    }
+    if (window.GLOBAL_MC_DATA.globalFlashReports) {
+        renderFlashReports();
+    }
+
+    const syncStatus = document.getElementById('sync-status');
+    const syncDot = document.getElementById('sync-dot');
+    if (syncStatus) syncStatus.textContent = `Data loaded (Updated: ${updateDateStr || 'N/A'})`;
+    if (syncDot) syncDot.classList.add('synced');
+    const saveBtn = document.getElementById('btn-save-data');
+    if (saveBtn) saveBtn.style.display = 'inline-flex';
+}
+
+async function loadDefaultData() {
+    let loaded = false;
+
+    // 1. Try to fetch data.json (works on GitHub Pages or local HTTP server)
+    try {
+        const response = await fetch('data.json');
+        if (response.ok) {
+            const jsonData = await response.json();
+            if (jsonData && jsonData.data) {
+                applyLoadedData(jsonData.data, jsonData.updateDate);
+                saveToDB('global_mc_data', jsonData);
+                loaded = true;
+                return;
+            }
+        }
+    } catch (e) {
+        console.log("fetch('data.json') unavailable on file:// protocol. Checking local IndexedDB cache...");
+    }
+
+    // 2. If fetch fails (running as file:/// on drive E), automatically load from IndexedDB!
+    if (!loaded) {
+        try {
+            const cached = await loadFromDB('global_mc_data');
+            if (cached && cached.data) {
+                applyLoadedData(cached.data, `${cached.updateDate || 'Saved'} (Browser Cache)`);
+                loaded = true;
+                return;
+            }
+        } catch (dbErr) {
+            console.warn("IndexedDB load error:", dbErr);
+        }
+    }
+
+    if (!loaded) {
+        const syncStatus = document.getElementById('sync-status');
+        if (syncStatus) syncStatus.textContent = 'Upload CMS files or click "Load data.json"';
+    }
+}
+
+function handleJsonUpload(e) {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+        try {
+            const parsed = JSON.parse(event.target.result);
+            if (!parsed || !parsed.data) {
+                alert("Invalid data.json file structure!");
+                return;
+            }
+            applyLoadedData(parsed.data, parsed.updateDate || 'Imported');
+            await saveToDB('global_mc_data', parsed);
+            alert(`Loaded data.json successfully! (Updated: ${parsed.updateDate || 'N/A'})\nData is now remembered locally in this browser.`);
+        } catch (err) {
+            console.error("Failed to parse JSON file:", err);
+            alert("Error reading data.json: " + err.message);
+        }
+        e.target.value = '';
+    };
+    reader.readAsText(file);
 }
 
 function setupTabs() {
@@ -731,6 +870,7 @@ function setupFileUpload() {
             
             syncStatus.textContent = 'Data updated from CMS';
             syncDot.classList.add('synced');
+            autoPersistCurrentData();
             document.getElementById('btn-save-data').style.display = 'inline-flex';
 
         } catch (error) {
@@ -1641,8 +1781,9 @@ function saveManualItr() {
 
     document.getElementById('manual-itr-modal').style.display = 'none';
     renderReport();
+    autoPersistCurrentData();
     document.getElementById('btn-save-data').style.display = 'inline-flex';
-    alert('Completed ITR saved! Click "Save Data" on top to permanently keep your manual changes in data.json.');
+    alert('Completed ITR saved! Click "Save Data" on top to export data.json.');
 }
 
 window.openEditManualItr = function(idx) {
@@ -1673,6 +1814,7 @@ window.deleteManualItr = function(idx) {
             }
         }
         renderReport();
+        autoPersistCurrentData();
         document.getElementById('btn-save-data').style.display = 'inline-flex';
     }
 };
@@ -2098,8 +2240,9 @@ function saveFlashFinding() {
 
     document.getElementById('flash-modal').style.display = 'none';
     renderFlashReports();
+    autoPersistCurrentData();
     document.getElementById('btn-save-data').style.display = 'inline-flex';
-    alert('Flash Finding saved! Click "Save Data" on top to permanently keep it in data.json.');
+    alert('Flash Finding saved! Data is saved locally in this browser. Click "Save Data" on top to export data.json.');
 }
 
 function renderFlashReports() {
@@ -2233,6 +2376,7 @@ window.deleteFlashFinding = function(id) {
     if (confirm(`Delete Flash Finding for ${item.tag}?`)) {
         gd.globalFlashReports = gd.globalFlashReports.filter(f => f.id !== id);
         renderFlashReports();
+        autoPersistCurrentData();
         document.getElementById('btn-save-data').style.display = 'inline-flex';
     }
 };
