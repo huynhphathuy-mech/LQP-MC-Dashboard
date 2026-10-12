@@ -7,7 +7,9 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
     <!-- SheetJS for Excel Parsing -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="xlsx.bundle.js"></script>
+    <!-- ExcelJS for Rich Excel Export with Images -->
+    <script src="exceljs.min.js"></script>
     <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
@@ -77,6 +79,7 @@
                     </div>
                 </div>
             </div>
+            
         </div>
     </div>
 
@@ -124,6 +127,7 @@
                     </div>
                 </div>
             </div>
+            
         </div>
     </div>
 
@@ -161,6 +165,7 @@
                     </div>
                 </div>
             </div>
+            
         </div>
     </div>
 
@@ -192,6 +197,12 @@
                 </button>
                 <button class="tab-btn" data-tab="skyline">
                     Handover and Skyline
+                </button>
+                <button class="tab-btn" data-tab="reports">
+                    Reports
+                </button>
+                <button class="tab-btn" data-tab="flash">
+                    Flash Report
                 </button>
             </nav>
 
@@ -412,9 +423,381 @@
                     
                 </div>
             </div>
+
+            <!-- Reports Tab (Weekly & Monthly Reports) -->
+            <div id="tab-reports" class="tab-content">
+                <div class="card full-height-card">
+                    <div class="matrix-toolbar" style="flex-wrap: wrap; gap: 0.75rem; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 0.75rem; margin-bottom: 0.75rem;">
+                        <div style="display: flex; align-items: center; gap: 0.5rem;">
+                            <span class="badge" style="background: #0ea5e9; color: #fff;">REPORT</span>
+                            <h3 style="margin: 0; font-size: 1rem; color: #fff;">ITR-A Completion Reports</h3>
+                        </div>
+                        
+                        <div class="matrix-filter-bar" style="flex-wrap: wrap; gap: 0.5rem; align-items: center;">
+                            <!-- Report Preset -->
+                            <select id="rpt-preset" class="filter-input dropdown" style="min-width: 170px;">
+                                <option value="weekly_current">This Week (Fri Cut-off)</option>
+                                <option value="weekly_prev">Last Week (Fri Cut-off)</option>
+                                <option value="monthly_current">This Month</option>
+                                <option value="monthly_prev">Last Month</option>
+                                <option value="custom">Custom Date Range</option>
+                            </select>
+
+                            <!-- Date Pickers -->
+                            <div style="display: flex; align-items: center; gap: 0.3rem;">
+                                <span style="color: #94a3b8; font-size: 0.8rem;">From:</span>
+                                <input type="date" id="rpt-from" class="filter-input" style="padding: 0.25rem 0.5rem; color-scheme: dark;">
+                                <span style="color: #94a3b8; font-size: 0.8rem;">To:</span>
+                                <input type="date" id="rpt-to" class="filter-input" style="padding: 0.25rem 0.5rem; color-scheme: dark;">
+                            </div>
+
+                            <!-- Discipline Filter -->
+                            <select id="rpt-disc" class="filter-input dropdown">
+                                <option value="MECHANICAL" selected>Mechanical</option>
+                                <option value="ALL">All Disciplines</option>
+                                <option value="PIPING">Piping</option>
+                                <option value="ELECTRICAL">Electrical</option>
+                                <option value="INSTRUMENT">Instrument</option>
+                                <option value="TELECOM">Telecom</option>
+                                <option value="HVAC">HVAC</option>
+                                <option value="SAFETY">Safety</option>
+                                <option value="ARCHITECTURE">Architecture</option>
+                                <option value="STRUCTURE">Structure</option>
+                            </select>
+
+                            <!-- Search Input -->
+                            <input type="text" id="rpt-search" class="filter-input" placeholder="Search Tag / Subsystem / Form..." style="min-width: 180px;">
+
+                            <!-- Action Buttons -->
+                            <button id="btn-rpt-view" class="btn-primary" style="padding: 0.35rem 0.8rem;">View Report</button>
+                            <button id="btn-rpt-export" class="btn-outline" style="padding: 0.35rem 0.8rem; background: rgba(16, 185, 129, 0.15); border-color: rgba(16, 185, 129, 0.4); color: #10b981; cursor: pointer;">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle; margin-right: 4px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                                Export Excel
+                            </button>
+                            <button id="btn-add-manual-itr" class="btn-outline" style="padding: 0.35rem 0.8rem; background: rgba(56, 189, 248, 0.15); border-color: rgba(56, 189, 248, 0.4); color: #38bdf8; cursor: pointer;">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle; margin-right: 4px;"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                                + Add / Edit Completed ITR
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Summary KPI Bar -->
+                    <div class="sky-top-boxes" style="margin-bottom: 0.75rem;">
+                        <div class="sky-top-box" style="flex: 1;">
+                            <div class="sky-box-title">COMPLETED IN PERIOD</div>
+                            <div class="sky-box-val" id="rpt-kpi-total" style="color: #10b981;">0 ITRs</div>
+                        </div>
+                        <div class="sky-top-box" style="flex: 1.5;">
+                            <div class="sky-box-title">SELECTED PERIOD</div>
+                            <div class="sky-box-val" id="rpt-kpi-period" style="font-size: 0.95rem; color: #38bdf8;">-</div>
+                        </div>
+                        <div class="sky-top-box" style="flex: 1;">
+                            <div class="sky-box-title">DISCIPLINE</div>
+                            <div class="sky-box-val" id="rpt-kpi-disc" style="font-size: 1.05rem; color: #f59e0b;">MECHANICAL</div>
+                        </div>
+                        <div class="sky-top-box" style="flex: 1;">
+                            <div class="sky-box-title">SUBSYSTEMS COUNT</div>
+                            <div class="sky-box-val" id="rpt-kpi-subsys" style="color: #e2e8f0;">0</div>
+                        </div>
+                    </div>
+
+                    <!-- Table Container -->
+                    <div class="matrix-container" style="flex: 1; overflow: auto;">
+                        <table class="matrix-table" id="rpt-table" style="width: 100%;">
+                            <thead>
+                                <tr>
+                                    <th style="width: 40px; text-align: center;">#</th>
+                                    <th style="width: 120px; text-align: left; padding-left: 8px;">SUBSYSTEM NO</th>
+                                    <th style="width: 210px; text-align: left; padding-left: 8px;">SUBSYSTEM DESCRIPTION</th>
+                                    <th style="width: 180px; text-align: left; padding-left: 8px;">TAG NO</th>
+                                    <th style="text-align: left; padding-left: 8px;">TAG DESCRIPTION</th>
+                                    <th style="width: 95px; text-align: left; padding-left: 8px;">DISCIPLINE</th>
+                                    <th style="width: 100px; text-align: center;">CHECKSHEET TYPE</th>
+                                    <th style="width: 110px; text-align: center;">COMPLETE DATE</th>
+                                    <th style="width: 75px; text-align: center;">STATUS</th>
+                                    <th style="width: 70px; text-align: center;">ACTION</th>
+                                </tr>
+                            </thead>
+                            <tbody id="rpt-tbody">
+                                <tr><td colspan="9" style="text-align:center; padding: 2rem; color: #64748b;">Click "View Report" to load completed ITR-A list</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <!-- Flash Report Tab (Inspection Findings & Technical Comments) -->
+            <div id="tab-flash" class="tab-content">
+                <div class="card full-height-card">
+                    <div class="matrix-toolbar" style="flex-wrap: wrap; gap: 0.75rem; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 0.75rem; margin-bottom: 0.75rem;">
+                        <div style="display: flex; align-items: center; gap: 0.5rem;">
+                            <span class="badge" style="background: #f59e0b; color: #000; font-weight: 700;">FLASH</span>
+                            <h3 style="margin: 0; font-size: 1rem; color: #fff;">ITR-A Inspection Findings</h3>
+                        </div>
+                        
+                        <div class="matrix-filter-bar" style="flex-wrap: wrap; gap: 0.5rem; align-items: center;">
+                            <!-- Discipline Filter -->
+                            <select id="flash-filter-disc" class="filter-input dropdown">
+                                <option value="ALL">All Disciplines</option>
+                                <option value="MECHANICAL" selected>Mechanical</option>
+                                <option value="PIPING">Piping</option>
+                                <option value="ELECTRICAL">Electrical</option>
+                                <option value="INSTRUMENT">Instrument</option>
+                                <option value="TELECOM">Telecom</option>
+                                <option value="HVAC">HVAC</option>
+                                <option value="SAFETY">Safety</option>
+                                <option value="ARCHITECTURE">Architecture</option>
+                                <option value="STRUCTURE">Structure</option>
+                            </select>
+
+                            <!-- Status Filter -->
+                            <select id="flash-filter-status" class="filter-input dropdown">
+                                <option value="ALL">All Status</option>
+                                <option value="Open">Open Only</option>
+                                <option value="Closed">Closed Only</option>
+                            </select>
+
+                            <!-- Search Input -->
+                            <input type="text" id="flash-search" class="filter-input" placeholder="Search Tag / Description / Note..." style="min-width: 200px;">
+
+                            <!-- Action Buttons -->
+                            <button id="btn-flash-add" class="btn-primary" style="padding: 0.35rem 0.9rem; background: #0ea5e9; border-color: #0ea5e9; cursor: pointer;">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle; margin-right: 4px;"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                                + New Finding
+                            </button>
+                            <button id="btn-flash-export" class="btn-outline" style="padding: 0.35rem 0.8rem; background: rgba(16, 185, 129, 0.15); border-color: rgba(16, 185, 129, 0.4); color: #10b981; cursor: pointer;">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle; margin-right: 4px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                                Export Excel
+                            </button>
+                            <button id="btn-flash-print" class="btn-outline" style="padding: 0.35rem 0.8rem; background: rgba(139, 92, 246, 0.15); border-color: rgba(139, 92, 246, 0.4); color: #a78bfa; cursor: pointer;">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle; margin-right: 4px;"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+                                Print / PDF
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Summary KPI Bar -->
+                    <div class="sky-top-boxes" style="margin-bottom: 0.75rem;">
+                        <div class="sky-top-box" style="flex: 1;">
+                            <div class="sky-box-title">TOTAL FINDINGS</div>
+                            <div class="sky-box-val" id="flash-kpi-total" style="color: #38bdf8;">0</div>
+                        </div>
+                        <div class="sky-top-box" style="flex: 1;">
+                            <div class="sky-box-title">OPEN ISSUES</div>
+                            <div class="sky-box-val" id="flash-kpi-open" style="color: #ef4444;">0</div>
+                        </div>
+                        <div class="sky-top-box" style="flex: 1;">
+                            <div class="sky-box-title">CLOSED ISSUES</div>
+                            <div class="sky-box-val" id="flash-kpi-closed" style="color: #10b981;">0</div>
+                        </div>
+                        <div class="sky-top-box" style="flex: 1;">
+                            <div class="sky-box-title">DISCIPLINE</div>
+                            <div class="sky-box-val" id="flash-kpi-disc" style="font-size: 1.05rem; color: #f59e0b;">MECHANICAL</div>
+                        </div>
+                    </div>
+
+                    <!-- Flash Report Table Container -->
+                    <div class="matrix-container" style="flex: 1; overflow: auto;">
+                        <table class="matrix-table" id="flash-table" style="width: 100%;">
+                            <thead>
+                                <tr>
+                                    <th style="width: 35px; text-align: center;">#</th>
+                                    <th style="width: 200px; text-align: left; padding-left: 8px;">TAG & SUBSYSTEM</th>
+                                    <th style="width: 280px; text-align: left; padding-left: 8px;">INSPECTION DESCRIPTION</th>
+                                    <th style="width: 250px; text-align: left; padding-left: 8px;">NOTE / RECOMMENDATION</th>
+                                    <th style="width: 110px; text-align: center;">ILLUSTRATION</th>
+                                    <th style="width: 80px; text-align: center;">STATUS</th>
+                                    <th style="text-align: left; padding-left: 8px;">RESPONSE</th>
+                                    <th style="width: 70px; text-align: center;">ACTION</th>
+                                </tr>
+                            </thead>
+                            <tbody id="flash-tbody">
+                                <tr><td colspan="8" style="text-align:center; padding: 2rem; color: #64748b;">No Flash Report findings recorded yet. Click "+ New Finding" to add.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
     
+
+    <!-- Manual ITR Completion Modal -->
+    <div id="manual-itr-modal" class="modal-overlay" style="display: none; z-index: 10000;">
+        <div class="modal-content" style="max-width: 550px; background: #1e293b; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px;">
+            <div class="modal-header" style="border-bottom: 1px solid rgba(255,255,255,0.08); padding: 1rem 1.25rem;">
+                <h2 id="manual-itr-modal-title" style="color: #fff; font-size: 1.1rem; margin: 0;">Record / Override Completed ITR-A</h2>
+                <button class="modal-close" id="manual-itr-modal-close" style="color: #94a3b8; font-size: 1.5rem; cursor: pointer; background:none; border:none;">&times;</button>
+            </div>
+            <div class="modal-body" style="padding: 1.25rem; display: flex; flex-direction: column; gap: 0.9rem;">
+                <input type="hidden" id="man-edit-idx" value="-1">
+                
+                <div>
+                    <label style="display: block; font-size: 0.8rem; color: #94a3b8; margin-bottom: 0.3rem;">Tag No <span style="color:#ef4444;">*</span>:</label>
+                    <input type="text" id="man-tag" class="filter-input" placeholder="e.g. TP-CLQU-45-03-DG-003-V" style="width: 100%;" list="tag-suggestions">
+                    <datalist id="tag-suggestions"></datalist>
+                </div>
+
+                <div>
+                    <label style="display: block; font-size: 0.8rem; color: #94a3b8; margin-bottom: 0.3rem;">Tag Description:</label>
+                    <input type="text" id="man-tag-desc" class="filter-input" placeholder="e.g. Open Drain Overboard" style="width: 100%;">
+                </div>
+
+                <div style="display: flex; gap: 0.75rem;">
+                    <div style="flex: 1;">
+                        <label style="display: block; font-size: 0.8rem; color: #94a3b8; margin-bottom: 0.3rem;">SubSystem No <span style="color:#ef4444;">*</span>:</label>
+                        <input type="text" id="man-subsys" class="filter-input" placeholder="e.g. CLQU-45-03" style="width: 100%;">
+                    </div>
+                    <div style="flex: 1;">
+                        <label style="display: block; font-size: 0.8rem; color: #94a3b8; margin-bottom: 0.3rem;">Discipline <span style="color:#ef4444;">*</span>:</label>
+                        <select id="man-disc" class="filter-input dropdown" style="width: 100%;">
+                            <option value="MECHANICAL">Mechanical</option>
+                            <option value="PIPING">Piping</option>
+                            <option value="ELECTRICAL">Electrical</option>
+                            <option value="INSTRUMENT">Instrument</option>
+                            <option value="TELECOM">Telecom</option>
+                            <option value="HVAC">HVAC</option>
+                            <option value="SAFETY">Safety</option>
+                            <option value="ARCHITECTURE">Architecture</option>
+                            <option value="STRUCTURE">Structure</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div style="display: flex; gap: 0.75rem;">
+                    <div style="flex: 1;">
+                        <label style="display: block; font-size: 0.8rem; color: #94a3b8; margin-bottom: 0.3rem;">ITR Form / Type <span style="color:#ef4444;">*</span>:</label>
+                        <input type="text" id="man-form" class="filter-input" placeholder="e.g. M17-A, P05-A..." style="width: 100%;">
+                    </div>
+                    <div style="flex: 1;">
+                        <label style="display: block; font-size: 0.8rem; color: #94a3b8; margin-bottom: 0.3rem;">Complete Date <span style="color:#ef4444;">*</span>:</label>
+                        <input type="date" id="man-date" class="filter-input" style="width: 100%; color-scheme: dark;">
+                    </div>
+                </div>
+
+                <div>
+                    <label style="display: block; font-size: 0.8rem; color: #94a3b8; margin-bottom: 0.3rem;">SubSystem Description (Optional):</label>
+                    <input type="text" id="man-subsys-desc" class="filter-input" placeholder="e.g. Open Drain Overboard Header" style="width: 100%;">
+                </div>
+
+                <div style="display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 0.5rem;">
+                    <button id="btn-man-cancel" class="btn-outline" style="padding: 0.4rem 1rem; cursor: pointer;">Cancel</button>
+                    <button id="btn-man-save" class="btn-primary" style="padding: 0.4rem 1.2rem; cursor: pointer;">Save & Add to Report</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- Flash Report Modal (Add / Edit Finding) -->
+    <div id="flash-modal" class="modal-overlay" style="display: none; z-index: 10000;">
+        <div class="modal-content" style="max-width: 650px; background: #1e293b; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px;">
+            <div class="modal-header" style="border-bottom: 1px solid rgba(255,255,255,0.08); padding: 1rem 1.25rem;">
+                <h2 id="flash-modal-title" style="color: #fff; font-size: 1.1rem; margin: 0;">Inspection Finding & Flash Report</h2>
+                <button class="modal-close" id="flash-modal-close" style="color: #94a3b8; font-size: 1.5rem; cursor: pointer; background:none; border:none;">&times;</button>
+            </div>
+            <div class="modal-body" style="padding: 1.25rem; display: flex; flex-direction: column; gap: 0.9rem; max-height: 80vh; overflow-y: auto;">
+                <input type="hidden" id="flash-edit-id" value="-1">
+                
+                <div style="display: flex; gap: 0.75rem;">
+                    <div style="flex: 1.5;">
+                        <label style="display: block; font-size: 0.8rem; color: #94a3b8; margin-bottom: 0.3rem;">Tag No <span style="color:#ef4444;">*</span>:</label>
+                        <input type="text" id="fl-tag" class="filter-input" placeholder="e.g. CPPT-PK-5201" style="width: 100%;" list="tag-suggestions">
+                    </div>
+                    <div style="flex: 1;">
+                        <label style="display: block; font-size: 0.8rem; color: #94a3b8; margin-bottom: 0.3rem;">Subsystem No:</label>
+                        <input type="text" id="fl-subsys" class="filter-input" placeholder="e.g. 52-01" style="width: 100%;">
+                    </div>
+                </div>
+
+                <div>
+                    <label style="display: block; font-size: 0.8rem; color: #94a3b8; margin-bottom: 0.3rem;">Equipment Description:</label>
+                    <input type="text" id="fl-desc" class="filter-input" placeholder="e.g. Nitrogen Generator Package" style="width: 100%;">
+                </div>
+
+                <div style="display: flex; gap: 0.75rem;">
+                    <div style="flex: 1;">
+                        <label style="display: block; font-size: 0.8rem; color: #94a3b8; margin-bottom: 0.3rem;">Discipline:</label>
+                        <select id="fl-disc" class="filter-input dropdown" style="width: 100%;">
+                            <option value="MECHANICAL">Mechanical</option>
+                            <option value="PIPING">Piping</option>
+                            <option value="ELECTRICAL">Electrical</option>
+                            <option value="INSTRUMENT">Instrument</option>
+                            <option value="TELECOM">Telecom</option>
+                            <option value="HVAC">HVAC</option>
+                            <option value="SAFETY">Safety</option>
+                            <option value="ARCHITECTURE">Architecture</option>
+                            <option value="STRUCTURE">Structure</option>
+                        </select>
+                    </div>
+                    <div style="flex: 1;">
+                        <label style="display: block; font-size: 0.8rem; color: #94a3b8; margin-bottom: 0.3rem;">Inspection Date:</label>
+                        <input type="date" id="fl-date" class="filter-input" style="width: 100%; color-scheme: dark;">
+                    </div>
+                    <div style="flex: 1;">
+                        <label style="display: block; font-size: 0.8rem; color: #94a3b8; margin-bottom: 0.3rem;">Status:</label>
+                        <select id="fl-status" class="filter-input dropdown" style="width: 100%;">
+                            <option value="Open">Open</option>
+                            <option value="Closed" selected>Closed</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div>
+                    <label style="display: block; font-size: 0.8rem; color: #94a3b8; margin-bottom: 0.3rem;">Inspection Description <span style="color:#ef4444;">*</span>:</label>
+                    <textarea id="fl-insp-desc" class="filter-input" rows="3" placeholder="Describe the findings, checksheets used or discrepancies..." style="width: 100%; resize: vertical;"></textarea>
+                </div>
+
+                <div>
+                    <label style="display: block; font-size: 0.8rem; color: #94a3b8; margin-bottom: 0.3rem;">Note / Recommendation:</label>
+                    <textarea id="fl-note" class="filter-input" rows="2" placeholder="Recommendations, action items or ROC updates..." style="width: 100%; resize: vertical;"></textarea>
+                </div>
+
+                <!-- Illustration (Image Upload & Paste Area) -->
+                <div>
+                    <label style="display: block; font-size: 0.8rem; color: #94a3b8; margin-bottom: 0.3rem;">Illustration (Image / Drawing / Photo):</label>
+                    <div id="fl-drop-zone" style="border: 2px dashed rgba(255,255,255,0.2); border-radius: 6px; padding: 0.75rem; text-align: center; background: rgba(0,0,0,0.2); cursor: pointer; position: relative;">
+                        <input type="file" id="fl-img-input" accept="image/*" style="display: none;">
+                        <div id="fl-drop-prompt" style="color: #94a3b8; font-size: 0.85rem;">
+                            📸 Click to choose an image or <b>paste screenshot (Ctrl + V)</b>
+                        </div>
+                        <div id="fl-img-preview-box" style="display: none; align-items: center; justify-content: center; gap: 1rem; margin-top: 0.5rem;">
+                            <img id="fl-img-preview" src="" style="max-height: 100px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.2);">
+                            <button type="button" id="btn-fl-remove-img" class="btn-outline" style="color: #ef4444; border-color: rgba(239,68,68,0.4); padding: 0.25rem 0.5rem; font-size: 0.75rem;">Remove Image</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.3rem;">
+                        <label style="font-size: 0.8rem; color: #94a3b8;">Response (Contractor / Engineering Reply):</label>
+                        <select id="fl-resp-type" class="filter-input dropdown" style="padding: 0.2rem 0.5rem; font-size: 0.75rem;">
+                            <option value="green">Approved / Closed (Green)</option>
+                            <option value="blue">In Progress / Apply (Blue)</option>
+                            <option value="red">Discrepancy / Action Required (Red)</option>
+                        </select>
+                    </div>
+                    <textarea id="fl-response" class="filter-input" rows="2" placeholder="Response or explanation from contractor..." style="width: 100%; resize: vertical;"></textarea>
+                </div>
+
+                <div style="display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 0.5rem;">
+                    <button id="btn-flash-cancel" class="btn-outline" style="padding: 0.4rem 1rem; cursor: pointer;">Cancel</button>
+                    <button id="btn-flash-save" class="btn-primary" style="padding: 0.4rem 1.2rem; cursor: pointer; background: #0ea5e9;">Save Finding</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Image Lightbox Modal -->
+    <div id="image-lightbox-modal" class="modal-overlay" style="display: none; z-index: 20000; background: rgba(0,0,0,0.85); cursor: pointer;" onclick="this.style.display='none'">
+        <div style="position: relative; max-width: 90vw; max-height: 90vh; display: flex; flex-direction: column; align-items: center; justify-content: center; margin: auto;">
+            <img id="lightbox-img" src="" style="max-width: 90vw; max-height: 85vh; border-radius: 6px; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
+            <div id="lightbox-caption" style="color: #fff; margin-top: 0.5rem; font-size: 0.9rem; background: rgba(0,0,0,0.6); padding: 4px 12px; border-radius: 4px;"></div>
+        </div>
+    </div>
+
+    <!-- Dedicated Print / PDF Template Container for Flash Report -->
+    <div id="flash-print-doc" class="printable-report-container"></div>
+
     <script src="app.js"></script>
 </body>
 </html>

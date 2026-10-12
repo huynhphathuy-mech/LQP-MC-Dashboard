@@ -191,3 +191,199 @@ body {
 .btn-outline:hover { background: rgba(14,165,233,0.1); }
 .btn-primary { background: #0ea5e9; border: 1px solid #0ea5e9; color: #fff; padding: 0.3rem 0.8rem; border-radius: 4px; cursor: pointer; font-size: 0.8rem; font-weight: 500; transition: all 0.2s; }
 .btn-primary:hover { background: #0284c7; }
+
+/* Dedicated Flash Report Print Styles */
+#flash-print-doc {
+    display: none;
+}
+
+@media print {
+    @page {
+        size: A4 landscape;
+        margin: 8mm 10mm 8mm 10mm;
+    }
+
+    html, body {
+        background-color: #ffffff !important;
+        background: #ffffff !important;
+        color: #0f172a !important;
+        height: auto !important;
+        overflow: visible !important;
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+
+    /* Hide app wrapper and UI */
+    .ambient-glow,
+    .app-wrapper,
+    .modal-overlay,
+    .toast {
+        display: none !important;
+        visibility: hidden !important;
+    }
+
+    /* Show only printable document */
+    #flash-print-doc {
+        display: block !important;
+        visibility: visible !important;
+        width: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        background: #ffffff !important;
+        color: #0f172a !important;
+    }
+
+    #flash-print-doc * {
+        visibility: visible !important;
+    }
+
+    .flash-print-header {
+        margin-bottom: 10px;
+    }
+
+    .flash-print-title {
+        font-size: 14pt;
+        font-weight: 800;
+        color: #1e3a8a;
+        margin-bottom: 8px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    .flash-print-meta-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 6px;
+        font-size: 9pt;
+    }
+
+    .flash-print-meta-table td {
+        padding: 5px 8px;
+        border: 1px solid #94a3b8;
+    }
+
+    .flash-print-meta-lbl {
+        font-weight: 700;
+        color: #334155;
+        background-color: #f1f5f9 !important;
+        width: 22%;
+    }
+
+    .flash-print-meta-val {
+        font-weight: 600;
+        color: #0f172a;
+        width: 28%;
+    }
+
+    .flash-print-section-banner {
+        background-color: #e2e8f0 !important;
+        color: #1e293b !important;
+        font-weight: 700;
+        font-size: 10pt;
+        text-align: center;
+        padding: 4px;
+        border: 1px solid #94a3b8;
+        margin-bottom: 6px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    .flash-print-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 8.5pt;
+        page-break-inside: auto;
+    }
+
+    .flash-print-table thead {
+        display: table-header-group;
+    }
+
+    .flash-print-table tr {
+        page-break-inside: avoid;
+        page-break-after: auto;
+    }
+
+    .flash-print-table th {
+        background-color: #1e3a8a !important;
+        color: #ffffff !important;
+        font-weight: 700;
+        text-align: center;
+        padding: 6px 4px;
+        border: 1px solid #0f172a !important;
+        font-size: 8.5pt;
+        text-transform: uppercase;
+    }
+
+    .flash-print-table td {
+        border: 1px solid #94a3b8 !important;
+        padding: 6px 8px;
+        vertical-align: middle;
+        color: #1e293b;
+        line-height: 1.35;
+    }
+
+    .flash-print-img {
+        max-width: 130px;
+        max-height: 85px;
+        object-fit: contain;
+        display: block;
+        margin: 0 auto;
+        border-radius: 3px;
+        border: 1px solid #cbd5e1;
+    }
+
+    .flash-print-status {
+        display: inline-block;
+        padding: 3px 8px;
+        border-radius: 4px;
+        font-weight: 700;
+        font-size: 8pt;
+        text-align: center;
+    }
+
+    .flash-print-status-closed {
+        background-color: #d1fae5 !important;
+        color: #065f46 !important;
+    }
+
+    .flash-print-status-open {
+        background-color: #fee2e2 !important;
+        color: #991b1b !important;
+    }
+
+    .flash-print-resp-box {
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 8.5pt;
+    }
+
+    .flash-print-resp-green {
+        background-color: #ecfdf5 !important;
+        color: #065f46 !important;
+        border-left: 3px solid #10b981;
+    }
+
+    .flash-print-resp-blue {
+        background-color: #f0f9ff !important;
+        color: #0369a1 !important;
+        border-left: 3px solid #0284c7;
+    }
+
+    .flash-print-resp-red {
+        background-color: #fef2f2 !important;
+        color: #991b1b !important;
+        border-left: 3px solid #ef4444;
+    }
+
+    .flash-print-footer {
+        margin-top: 10px;
+        display: flex;
+        justify-content: space-between;
+        font-size: 7.5pt;
+        color: #64748b;
+        border-top: 1px solid #cbd5e1;
+        padding-top: 5px;
+    }
+}

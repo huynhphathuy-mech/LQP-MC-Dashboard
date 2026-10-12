@@ -13,6 +13,8 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Filters & Export
     setupFilters();
+    setupReports();
+    setupFlashReport();
 });
 
 function exportData() {
@@ -79,6 +81,13 @@ async function loadDefaultData() {
         renderMatrix(matrix);
         renderSkylineBoxes(mcData, sumItr);
         renderSkylineChart(chartLabels, planBar, actBar, planLine, actLine);
+
+        if (window.GLOBAL_MC_DATA.globalCompletedChecksheets) {
+            initReportsUI();
+        }
+        if (window.GLOBAL_MC_DATA.globalFlashReports) {
+            renderFlashReports();
+        }
 
         document.getElementById('sync-status').textContent = `Default data loaded (Updated: ${jsonData.updateDate || 'N/A'})`;
         document.getElementById('sync-dot').classList.add('synced');
@@ -291,6 +300,7 @@ function setupFileUpload() {
         let globalPunchList = [];
         let globalCertList = [];
         let globalTagMap = {};
+        let globalCompletedChecksheets = [];
 
         // Pre-fill sumItr with correctly ordered DISCIPLINES
         DISCIPLINES.forEach(d => sumItr[d] = {d:0, t:0});
@@ -358,6 +368,21 @@ function setupFileUpload() {
                         }
 
                         const tagNo = getValueRobust(row, ['TagNo', 'Tag No', 'EquipmentNo', 'Equipment No']);
+
+                        if (isDone) {
+                            globalCompletedChecksheets.push({
+                                sys: sys,
+                                subsys: subStr,
+                                subsysDesc: sysDescMap[subStr] || String(desc || '-').trim(),
+                                disc: disc,
+                                formNo: String(getValueRobust(row, ['Checksheet Type', 'ChecksheetType']) || '').trim(),
+                                tag: tagNo ? String(tagNo).trim() : '',
+                                tagDesc: String(getValueRobust(row, ['TagDescription', 'Description', 'EquipmentDescription', 'Tag Description']) || '-').trim(),
+                                compDate: compDate,
+                                dateStr: formatDateStr(compDate),
+                                week: wk
+                            });
+                        }
                         if (tagNo) {
                             const t = String(tagNo).trim();
                             if (!globalTagMap[t]) {
@@ -635,8 +660,27 @@ function setupFileUpload() {
                 skyData.discActualByWeek = skyData.kpiDiscAct || {};
             }
 
+            // Preserve globalFlashReports across file re-syncs
+            let globalFlashReports = [];
+            if (window.GLOBAL_MC_DATA && window.GLOBAL_MC_DATA.globalFlashReports) {
+                globalFlashReports = window.GLOBAL_MC_DATA.globalFlashReports;
+            }
+
+            // Smart Merge: Retain manual items that are not yet in new Excel, but let new Excel take precedence if updated
+            if (window.GLOBAL_MC_DATA && window.GLOBAL_MC_DATA.globalCompletedChecksheets) {
+                const previousManuals = window.GLOBAL_MC_DATA.globalCompletedChecksheets.filter(x => x.isManual);
+                previousManuals.forEach(manItem => {
+                    const alreadyOfficial = globalCompletedChecksheets.some(
+                        offItem => offItem.tag === manItem.tag && (!manItem.formNo || offItem.formNo === manItem.formNo)
+                    );
+                    if (!alreadyOfficial) {
+                        globalCompletedChecksheets.push(manItem);
+                    }
+                });
+            }
+
             // Global save for Modals
-            window.GLOBAL_MC_DATA = { mcData, dashGroups, matrix, sumItr, sumPunch, sumDac, sumCssc, skyData, sysDescMap, globalPunchList, globalCertList, globalTagMap };
+            window.GLOBAL_MC_DATA = { mcData, dashGroups, matrix, sumItr, sumPunch, sumDac, sumCssc, skyData, sysDescMap, globalPunchList, globalCertList, globalTagMap, globalCompletedChecksheets, globalFlashReports };
 
             const allWeeksSet = new Set([...Object.keys(skyData.itrPlanByWeek), ...Object.keys(skyData.itrActualByWeek)]);
             const allWeeks = Array.from(allWeeksSet).sort();
@@ -677,6 +721,13 @@ function setupFileUpload() {
             renderSkylineChart(chartLabels, planBar, actBar, planLine, actLine);
 
             populateSysDropdown(matrix);
+
+            if (window.GLOBAL_MC_DATA.globalCompletedChecksheets) {
+                initReportsUI();
+            }
+            if (window.GLOBAL_MC_DATA.globalFlashReports) {
+                renderFlashReports();
+            }
             
             syncStatus.textContent = 'Data updated from CMS';
             syncDot.classList.add('synced');
@@ -1364,4 +1415,1237 @@ function openCertModal(type, group) {
     });
     
     document.getElementById('cert-tbody').innerHTML = tbodyHtml;
+}
+
+
+// =========================================================================
+// ----------------- REPORTS TAB LOGIC (WEEKLY & MONTHLY) ------------------
+// =========================================================================
+
+let currentFilteredReports = [];
+
+
+function formatDateDisplay(val) {
+    if (!val) return '';
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    if (val instanceof Date && !isNaN(val.getTime())) {
+        const dd = String(val.getDate()).padStart(2, '0');
+        const mmm = months[val.getMonth()];
+        const yyyy = val.getFullYear();
+        return `${dd}-${mmm}-${yyyy}`;
+    }
+    const str = String(val).trim();
+    if (str.includes('-')) {
+        const parts = str.split('T')[0].split(' ')[0].split('-');
+        if (parts.length === 3) {
+            const yyyy = parts[0];
+            const mIdx = parseInt(parts[1], 10) - 1;
+            const dd = parts[2].substring(0, 2).padStart(2, '0');
+            if (mIdx >= 0 && mIdx < 12) {
+                return `${dd}-${months[mIdx]}-${yyyy}`;
+            }
+        }
+    }
+    const d = new Date(val);
+    if (!isNaN(d.getTime())) {
+        const dd = String(d.getDate()).padStart(2, '0');
+        const mmm = months[d.getMonth()];
+        const yyyy = d.getFullYear();
+        return `${dd}-${mmm}-${yyyy}`;
+    }
+    return str;
+}
+
+function setupReports() {
+    const presetSelect = document.getElementById('rpt-preset');
+    const fromInput = document.getElementById('rpt-from');
+    const toInput = document.getElementById('rpt-to');
+    const discSelect = document.getElementById('rpt-disc');
+    const searchInput = document.getElementById('rpt-search');
+    const viewBtn = document.getElementById('btn-rpt-view');
+    const exportBtn = document.getElementById('btn-rpt-export');
+
+    if (!presetSelect) return;
+
+    function updateDateInputsFromPreset() {
+        const val = presetSelect.value;
+        const gd = window.GLOBAL_MC_DATA;
+        
+        // Use current real calendar date so Weekly/Monthly align with real-world timeline
+        const today = new Date();
+        const day = today.getDay(); // 0: Sun, 1: Mon, ..., 5: Fri, 6: Sat
+        
+        // Reporting week cutoff is Friday (Week runs from Sat to Fri):
+        // If today is Sat (6), next cutoff Friday is +6 days.
+        // If today is Sun (0), next cutoff Friday is +5 days.
+        // If today is Mon-Fri, this cutoff Friday is +(5 - day) days.
+        const daysToFri = (day === 6) ? 6 : (5 - day);
+        
+        const thisFri = new Date(today);
+        thisFri.setDate(today.getDate() + daysToFri);
+        const thisSat = new Date(thisFri);
+        thisSat.setDate(thisFri.getDate() - 6);
+
+        if (val === 'weekly_current') {
+            fromInput.value = thisSat.toISOString().split('T')[0];
+            toInput.value = thisFri.toISOString().split('T')[0];
+        } else if (val === 'weekly_prev') {
+            const prevFri = new Date(thisFri);
+            prevFri.setDate(thisFri.getDate() - 7);
+            const prevSat = new Date(prevFri);
+            prevSat.setDate(prevFri.getDate() - 6);
+
+            fromInput.value = prevSat.toISOString().split('T')[0];
+            toInput.value = prevFri.toISOString().split('T')[0];
+        } else if (val === 'monthly_current') {
+            const y = today.getFullYear();
+            const m = today.getMonth();
+            const firstDay = new Date(y, m, 1);
+            const lastDay = new Date(y, m + 1, 0);
+            fromInput.value = firstDay.toISOString().split('T')[0];
+            toInput.value = lastDay.toISOString().split('T')[0];
+        } else if (val === 'monthly_prev') {
+            const y = today.getFullYear();
+            const m = today.getMonth() - 1;
+            const firstDay = new Date(y, m, 1);
+            const lastDay = new Date(y, m + 1, 0);
+            fromInput.value = firstDay.toISOString().split('T')[0];
+            toInput.value = lastDay.toISOString().split('T')[0];
+        }
+    }
+
+    presetSelect.addEventListener('change', () => {
+        if (presetSelect.value !== 'custom') {
+            updateDateInputsFromPreset();
+            renderReport();
+        }
+    });
+
+    discSelect.addEventListener('change', renderReport);
+    viewBtn.addEventListener('click', renderReport);
+    searchInput.addEventListener('input', renderReport);
+    exportBtn.addEventListener('click', exportReportToExcel);
+
+    // Manual ITR Add/Edit Handlers
+    const addManualBtn = document.getElementById('btn-add-manual-itr');
+    const manualModal = document.getElementById('manual-itr-modal');
+    const manualClose = document.getElementById('manual-itr-modal-close');
+    const manualCancel = document.getElementById('btn-man-cancel');
+    const manualSave = document.getElementById('btn-man-save');
+    const manTagInput = document.getElementById('man-tag');
+
+    if (addManualBtn && manualModal) {
+        addManualBtn.addEventListener('click', () => {
+            document.getElementById('man-edit-idx').value = '-1';
+            document.getElementById('manual-itr-modal-title').textContent = 'Add / Override Completed ITR-A';
+            document.getElementById('man-tag').value = '';
+            document.getElementById('man-tag-desc').value = '';
+            document.getElementById('man-subsys').value = '';
+            document.getElementById('man-subsys-desc').value = '';
+            document.getElementById('man-disc').value = document.getElementById('rpt-disc').value !== 'ALL' ? document.getElementById('rpt-disc').value : 'MECHANICAL';
+            document.getElementById('man-form').value = '';
+            document.getElementById('man-date').value = new Date().toISOString().split('T')[0];
+            populateTagSuggestions();
+            manualModal.style.display = 'flex';
+        });
+
+        const closeModal = () => { manualModal.style.display = 'none'; };
+        if (manualClose) manualClose.addEventListener('click', closeModal);
+        if (manualCancel) manualCancel.addEventListener('click', closeModal);
+
+        // Auto-fill tag details when selecting known tag
+        if (manTagInput) {
+            manTagInput.addEventListener('change', () => {
+                const gd = window.GLOBAL_MC_DATA;
+                if (!gd || !gd.globalTagMap) return;
+                const tVal = manTagInput.value.trim();
+                const found = gd.globalTagMap[tVal];
+                if (found) {
+                    if (found.desc && found.desc !== '-') document.getElementById('man-tag-desc').value = found.desc;
+                    if (found.subsys) {
+                        document.getElementById('man-subsys').value = found.subsys;
+                        if (gd.sysDescMap && gd.sysDescMap[found.subsys]) {
+                            document.getElementById('man-subsys-desc').value = gd.sysDescMap[found.subsys];
+                        }
+                    }
+                    if (found.disc) document.getElementById('man-disc').value = found.disc;
+                }
+            });
+        }
+
+        if (manualSave) {
+            manualSave.addEventListener('click', saveManualItr);
+        }
+    }
+
+    updateDateInputsFromPreset();
+}
+
+function populateTagSuggestions() {
+    const gd = window.GLOBAL_MC_DATA;
+    const dl = document.getElementById('tag-suggestions');
+    if (!gd || !gd.globalTagMap || !dl) return;
+    dl.innerHTML = '';
+    Object.keys(gd.globalTagMap).slice(0, 100).forEach(t => {
+        dl.innerHTML += `<option value="${t}">`;
+    });
+}
+
+function saveManualItr() {
+    const gd = window.GLOBAL_MC_DATA;
+    if (!gd) return;
+    if (!gd.globalCompletedChecksheets) gd.globalCompletedChecksheets = [];
+
+    const tag = document.getElementById('man-tag').value.trim();
+    const subsys = document.getElementById('man-subsys').value.trim();
+    const formNo = document.getElementById('man-form').value.trim();
+    const compDate = document.getElementById('man-date').value;
+    const disc = document.getElementById('man-disc').value;
+    const tagDesc = document.getElementById('man-tag-desc').value.trim() || '-';
+    const subsysDesc = document.getElementById('man-subsys-desc').value.trim() || (gd.sysDescMap ? gd.sysDescMap[subsys] : '') || '-';
+    const editIdx = parseInt(document.getElementById('man-edit-idx').value, 10);
+
+    if (!tag || !subsys || !compDate) {
+        alert('Please fill in Tag No, SubSystem No, and Complete Date!');
+        return;
+    }
+
+    const sys = subsys.includes('-') && subsys.split('-').length > 1 ? subsys.split('-')[1] : 'OTHER';
+
+    if (editIdx >= 0 && editIdx < currentFilteredReports.length) {
+        // Edit existing item
+        const targetItem = currentFilteredReports[editIdx];
+        targetItem.tag = tag;
+        targetItem.tagDesc = tagDesc;
+        targetItem.subsys = subsys;
+        targetItem.subsysDesc = subsysDesc;
+        targetItem.sys = sys;
+        targetItem.disc = disc;
+        targetItem.formNo = formNo;
+        targetItem.dateStr = compDate;
+        targetItem.isManual = true;
+    } else {
+        // Add new item
+        gd.globalCompletedChecksheets.push({
+            sys: sys,
+            subsys: subsys,
+            subsysDesc: subsysDesc,
+            disc: disc,
+            formNo: formNo || 'ITR-A',
+            tag: tag,
+            tagDesc: tagDesc,
+            dateStr: compDate,
+            isManual: true
+        });
+    }
+
+    document.getElementById('manual-itr-modal').style.display = 'none';
+    renderReport();
+    document.getElementById('btn-save-data').style.display = 'inline-flex';
+    alert('Completed ITR saved! Click "Save Data" on top to permanently keep your manual changes in data.json.');
+}
+
+window.openEditManualItr = function(idx) {
+    if (!currentFilteredReports || !currentFilteredReports[idx]) return;
+    const item = currentFilteredReports[idx];
+    document.getElementById('man-edit-idx').value = idx;
+    document.getElementById('manual-itr-modal-title').textContent = 'Edit Completion Date / Details';
+    document.getElementById('man-tag').value = item.tag || '';
+    document.getElementById('man-tag-desc').value = item.tagDesc || '';
+    document.getElementById('man-subsys').value = item.subsys || '';
+    document.getElementById('man-subsys-desc').value = item.subsysDesc || '';
+    document.getElementById('man-disc').value = item.disc || 'MECHANICAL';
+    document.getElementById('man-form').value = item.formNo || '';
+    document.getElementById('man-date').value = item.dateStr || '';
+    populateTagSuggestions();
+    document.getElementById('manual-itr-modal').style.display = 'flex';
+};
+
+window.deleteManualItr = function(idx) {
+    if (!currentFilteredReports || !currentFilteredReports[idx]) return;
+    const item = currentFilteredReports[idx];
+    if (confirm(`Remove Tag ${item.tag} (${item.formNo}) from completed report?`)) {
+        const gd = window.GLOBAL_MC_DATA;
+        if (gd && gd.globalCompletedChecksheets) {
+            const pos = gd.globalCompletedChecksheets.indexOf(item);
+            if (pos !== -1) {
+                gd.globalCompletedChecksheets.splice(pos, 1);
+            }
+        }
+        renderReport();
+        document.getElementById('btn-save-data').style.display = 'inline-flex';
+    }
+};
+
+function initReportsUI() {
+    const presetSelect = document.getElementById('rpt-preset');
+    if (presetSelect) {
+        presetSelect.dispatchEvent(new Event('change'));
+    }
+}
+
+function renderReport() {
+    const gd = window.GLOBAL_MC_DATA;
+    if (!gd) return;
+
+    const fromDate = document.getElementById('rpt-from').value;
+    const toDate = document.getElementById('rpt-to').value;
+    const disc = document.getElementById('rpt-disc').value;
+    const q = (document.getElementById('rpt-search').value || '').trim().toLowerCase();
+    const list = gd.globalCompletedChecksheets || [];
+
+    const filtered = list.filter(item => {
+        if (fromDate && item.dateStr < fromDate) return false;
+        if (toDate && item.dateStr > toDate) return false;
+        if (disc !== 'ALL' && item.disc !== disc) return false;
+        if (q) {
+            const match = (item.tag && item.tag.toLowerCase().includes(q)) ||
+                          (item.subsys && item.subsys.toLowerCase().includes(q)) ||
+                          (item.formNo && item.formNo.toLowerCase().includes(q)) ||
+                          (item.tagDesc && item.tagDesc.toLowerCase().includes(q));
+            if (!match) return false;
+        }
+        return true;
+    });
+
+    filtered.sort((a, b) => {
+        if (a.dateStr !== b.dateStr) return b.dateStr.localeCompare(a.dateStr);
+        if (a.subsys !== b.subsys) return a.subsys.localeCompare(b.subsys);
+        return a.tag.localeCompare(b.tag);
+    });
+
+    currentFilteredReports = filtered;
+
+    const subsysSet = new Set(filtered.map(x => x.subsys));
+    document.getElementById('rpt-kpi-total').textContent = `${filtered.length} ITRs`;
+    document.getElementById('rpt-kpi-period').textContent = fromDate && toDate ? `${formatDateDisplay(fromDate)} → ${formatDateDisplay(toDate)}` : 'All Dates';
+    document.getElementById('rpt-kpi-disc').textContent = disc;
+    document.getElementById('rpt-kpi-subsys').textContent = `${subsysSet.size} Subsystems`;
+
+    const tbody = document.getElementById('rpt-tbody');
+    if (!tbody) return;
+
+    if (filtered.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding: 2rem; color: #64748b;">No completed ITR-A found for the selected period and criteria.</td></tr>`;
+        return;
+    }
+
+    let html = '';
+    filtered.forEach((item, idx) => {
+        html += `
+            <tr>
+                <td style="color: #64748b; text-align: center;">${idx + 1}</td>
+                <td style="text-align: left; padding-left: 8px;"><b>${item.subsys}</b></td>
+                <td style="text-align: left; padding-left: 8px; color: #94a3b8; font-size: 0.8rem;">${item.subsysDesc || '-'}</td>
+                <td style="text-align: left; padding-left: 8px;"><b>${item.tag}</b></td>
+                <td style="text-align: left; padding-left: 8px;">${item.tagDesc}</td>
+                <td style="text-align: left; padding-left: 8px;">${item.disc}</td>
+                <td style="text-align: center;"><span class="badge" style="background: rgba(14,165,233,0.15); color: #0ea5e9;">${item.formNo}</span></td>
+                <td style="text-align: center;"><b style="color: #38bdf8; cursor: pointer;" onclick="openEditManualItr(${idx})" title="Click to edit completion date">${formatDateDisplay(item.dateStr)}</b></td>
+                <td style="text-align: center;"><span class="badge" style="background: rgba(16,185,129,0.15); color: #10b981;">${item.isManual ? 'VERIFIED' : 'DONE'}</span></td>
+                <td style="text-align: center;">
+                    <button onclick="openEditManualItr(${idx})" style="background:none; border:none; color:#38bdf8; cursor:pointer; padding:2px 4px;" title="Edit Date / Info">✏️</button>
+                    <button onclick="deleteManualItr(${idx})" style="background:none; border:none; color:#ef4444; cursor:pointer; padding:2px 4px;" title="Remove from report">🗑️</button>
+                </td>
+            </tr>
+        `;
+    });
+    tbody.innerHTML = html;
+}
+
+function exportReportToExcel() {
+    if (!currentFilteredReports || currentFilteredReports.length === 0) {
+        alert("No completed checksheets in this report to export!");
+        return;
+    }
+
+    const fromDate = document.getElementById('rpt-from').value;
+    const toDate = document.getElementById('rpt-to').value;
+    const disc = document.getElementById('rpt-disc').value;
+    const preset = document.getElementById('rpt-preset').value;
+
+    const isMonthly = preset.includes('monthly');
+    const reportTitle = isMonthly ? 'MONTHLY ITR-A COMPLETION REPORT' : 'WEEKLY ITR-A COMPLETION REPORT';
+    
+    // Header labels
+    const cutOffLabel = isMonthly ? 'Report Month:' : 'Cut-off Date:';
+    const cutOffVal = isMonthly ? formatDateDisplay(toDate).substring(3) : formatDateDisplay(toDate);
+    const periodStr = `${formatDateDisplay(fromDate)} to ${formatDateDisplay(toDate)}`;
+
+    const excelData = [
+        [reportTitle, '', '', '', '', '', '', '', ''],
+        ['Project: BLOCK B LQP — MECHANICAL COMPLETION', '', '', '', '', '', '', '', ''],
+        [`${cutOffLabel} ${cutOffVal}`, '', '', `Period: ${periodStr}`, '', '', '', '', ''],
+        [`Discipline: ${disc}`, '', '', `Total Completed: ${currentFilteredReports.length} ITRs`, '', '', '', '', ''],
+        [`Exported Date: ${formatDateDisplay(new Date())}`, '', '', '', '', '', '', '', ''],
+        [],
+        ['No', 'SubSystemNo', 'SubSystemDescription', 'TagNo', 'TagDescription', 'Discipline', 'Checksheet Type', 'CompleteDate', 'Status']
+    ];
+
+    currentFilteredReports.forEach((item, idx) => {
+        excelData.push([
+            idx + 1,
+            item.subsys,
+            item.subsysDesc || '-',
+            item.tag,
+            item.tagDesc,
+            item.disc,
+            item.formNo,
+            formatDateDisplay(item.dateStr),
+            'COMPLETED'
+        ]);
+    });
+
+    const ws = XLSX.utils.aoa_to_sheet(excelData);
+
+    // Merge cells for Top Metadata so NO text is ever clipped
+    ws['!merges'] = [
+        { s: { r: 0, c: 0 }, e: { r: 0, c: 8 } }, // Title across A1:I1
+        { s: { r: 1, c: 0 }, e: { r: 1, c: 8 } }, // Project across A2:I2
+        { s: { r: 2, c: 0 }, e: { r: 2, c: 2 } }, // Cut-off merged across A3:C3
+        { s: { r: 2, c: 3 }, e: { r: 2, c: 8 } }, // Period merged across D3:I3
+        { s: { r: 3, c: 0 }, e: { r: 3, c: 2 } }, // Discipline merged across A4:C4
+        { s: { r: 3, c: 3 }, e: { r: 3, c: 8 } }, // Total merged across D4:I4
+        { s: { r: 4, c: 0 }, e: { r: 4, c: 2 } }  // Exported Date merged across A5:C5
+    ];
+
+    // Auto-fit Column Widths based on actual content
+    const colWidths = [];
+    for (let C = 0; C < 9; C++) {
+        let maxLen = 0;
+        for (let R = 6; R < excelData.length; R++) {
+            const val = excelData[R] && excelData[R][C] !== undefined ? String(excelData[R][C]) : '';
+            if (val.length > maxLen) maxLen = val.length;
+        }
+        let minW = 12;
+        if (C === 0) minW = 6;
+        else if (C === 1) minW = 15;
+        else if (C === 2) minW = 28;
+        else if (C === 3) minW = 24;
+        else if (C === 4) minW = 32;
+        else if (C === 5) minW = 14;
+        else if (C === 6) minW = 16;
+        else if (C === 7) minW = 14;
+        else if (C === 8) minW = 12;
+        colWidths.push({ wch: Math.max(maxLen + 3, minW) });
+    }
+    ws['!cols'] = colWidths;
+
+    // Styling definitions (Supported by xlsx-js-style)
+    const thinBorder = {
+        top: { style: 'thin', color: { rgb: 'CBD5E1' } },
+        bottom: { style: 'thin', color: { rgb: 'CBD5E1' } },
+        left: { style: 'thin', color: { rgb: 'CBD5E1' } },
+        right: { style: 'thin', color: { rgb: 'CBD5E1' } }
+    };
+
+    const headerBorder = {
+        top: { style: 'medium', color: { rgb: '0F172A' } },
+        bottom: { style: 'medium', color: { rgb: '0F172A' } },
+        left: { style: 'thin', color: { rgb: '334155' } },
+        right: { style: 'thin', color: { rgb: '334155' } }
+    };
+
+    const range = XLSX.utils.decode_range(ws['!ref']);
+    for (let R = range.s.r; R <= range.e.r; ++R) {
+        for (let C = range.s.c; C <= range.e.c; ++C) {
+            const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+            if (!ws[cellAddress]) continue;
+
+            if (R === 0) {
+                // Title
+                ws[cellAddress].s = {
+                    font: { name: 'Calibri', sz: 14, bold: true, color: { rgb: '1E3A8A' } },
+                    alignment: { vertical: 'center' }
+                };
+            } else if (R === 1) {
+                // Project
+                ws[cellAddress].s = {
+                    font: { name: 'Calibri', sz: 11, bold: true, color: { rgb: '475569' } },
+                    alignment: { vertical: 'center' }
+                };
+            } else if (R >= 2 && R <= 4) {
+                // Metadata
+                const isLabel = (C === 0 || C === 3);
+                ws[cellAddress].s = {
+                    font: { name: 'Calibri', sz: 10, bold: isLabel, color: isLabel ? { rgb: '0F172A' } : { rgb: '334155' } },
+                    alignment: { vertical: 'center' }
+                };
+            } else if (R === 6) {
+                // Table Header Row (Tag No, Subsystem...)
+                ws[cellAddress].s = {
+                    font: { name: 'Calibri', sz: 11, bold: true, color: { rgb: 'FFFFFF' } },
+                    fill: { fgColor: { rgb: '1E3A8A' } }, // Professional navy blue
+                    border: headerBorder,
+                    alignment: { horizontal: 'center', vertical: 'center', wrapText: true }
+                };
+            } else if (R >= 7) {
+                // Data Rows with Grid Borders
+                const isCenter = (C === 0 || C === 6 || C === 7 || C === 8);
+                ws[cellAddress].s = {
+                    font: { name: 'Calibri', sz: 10 },
+                    border: thinBorder,
+                    alignment: { horizontal: isCenter ? 'center' : 'left', vertical: 'center' }
+                };
+                if (C === 8) {
+                    ws[cellAddress].s.font = { name: 'Calibri', sz: 10, bold: true, color: { rgb: '059669' } };
+                }
+            }
+        }
+    }
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "ITR Report");
+
+    const fileName = `${isMonthly ? 'Monthly' : 'Weekly'}_Report_${disc}_${formatDateDisplay(toDate) || 'All'}.xlsx`;
+    XLSX.writeFile(wb, fileName);
+}
+
+
+// =========================================================================
+// ----------------- FLASH REPORT TAB LOGIC (INSPECTION FINDINGS) -----------
+// =========================================================================
+
+let currentFilteredFlash = [];
+let tempFlashImgData = '';
+
+function setupFlashReport() {
+    const discSelect = document.getElementById('flash-filter-disc');
+    const statusSelect = document.getElementById('flash-filter-status');
+    const searchInput = document.getElementById('flash-search');
+    const addBtn = document.getElementById('btn-flash-add');
+    const exportBtn = document.getElementById('btn-flash-export');
+    const printBtn = document.getElementById('btn-flash-print');
+
+    if (!addBtn) return;
+
+    discSelect.addEventListener('change', renderFlashReports);
+    statusSelect.addEventListener('change', renderFlashReports);
+    searchInput.addEventListener('input', renderFlashReports);
+
+    // Modal controls
+    const flashModal = document.getElementById('flash-modal');
+    const flashClose = document.getElementById('flash-modal-close');
+    const flashCancel = document.getElementById('btn-flash-cancel');
+    const flashSave = document.getElementById('btn-flash-save');
+
+    addBtn.addEventListener('click', () => {
+        document.getElementById('flash-edit-id').value = '-1';
+        document.getElementById('flash-modal-title').textContent = 'New Inspection Finding & Flash Report';
+        document.getElementById('fl-tag').value = '';
+        document.getElementById('fl-subsys').value = '';
+        document.getElementById('fl-desc').value = '';
+        document.getElementById('fl-disc').value = discSelect.value !== 'ALL' ? discSelect.value : 'MECHANICAL';
+        document.getElementById('fl-date').value = new Date().toISOString().split('T')[0];
+        document.getElementById('fl-status').value = 'Closed';
+        document.getElementById('fl-insp-desc').value = '';
+        document.getElementById('fl-note').value = '';
+        document.getElementById('fl-response').value = '';
+        document.getElementById('fl-resp-type').value = 'green';
+        clearFlashImgPreview();
+        populateTagSuggestions();
+        flashModal.style.display = 'flex';
+    });
+
+    const closeFModal = () => { flashModal.style.display = 'none'; };
+    if (flashClose) flashClose.addEventListener('click', closeFModal);
+    if (flashCancel) flashCancel.addEventListener('click', closeFModal);
+
+    // Auto-fill Tag details
+    const tagInp = document.getElementById('fl-tag');
+    if (tagInp) {
+        tagInp.addEventListener('change', () => {
+            const gd = window.GLOBAL_MC_DATA;
+            if (!gd || !gd.globalTagMap) return;
+            const tVal = tagInp.value.trim();
+            const found = gd.globalTagMap[tVal];
+            if (found) {
+                if (found.desc && found.desc !== '-') document.getElementById('fl-desc').value = found.desc;
+                if (found.subsys) document.getElementById('fl-subsys').value = found.subsys;
+                if (found.disc) document.getElementById('fl-disc').value = found.disc;
+            }
+        });
+    }
+
+    // Image Upload & Paste
+    const dropZone = document.getElementById('fl-drop-zone');
+    const imgInput = document.getElementById('fl-img-input');
+    const removeImgBtn = document.getElementById('btn-fl-remove-img');
+
+    if (dropZone && imgInput) {
+        dropZone.addEventListener('click', (e) => {
+            if (e.target !== removeImgBtn) imgInput.click();
+        });
+
+        imgInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (re) => { setFlashImgPreview(re.target.result); };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        // Paste support (Ctrl + V)
+        window.addEventListener('paste', (e) => {
+            if (flashModal.style.display === 'flex') {
+                const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+                for (const item of items) {
+                    if (item.type.indexOf('image') !== -1) {
+                        const blob = item.getAsFile();
+                        const reader = new FileReader();
+                        reader.onload = (re) => { setFlashImgPreview(re.target.result); };
+                        reader.readAsDataURL(blob);
+                        break;
+                    }
+                }
+            }
+        });
+    }
+
+    if (removeImgBtn) {
+        removeImgBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            clearFlashImgPreview();
+        });
+    }
+
+    if (flashSave) flashSave.addEventListener('click', saveFlashFinding);
+    if (exportBtn) exportBtn.addEventListener('click', exportFlashReportExcel);
+    if (printBtn) printBtn.addEventListener('click', printFlashReport);
+
+    renderFlashReports();
+}
+
+function setFlashImgPreview(dataUrl) {
+    tempFlashImgData = dataUrl;
+    const previewBox = document.getElementById('fl-img-preview-box');
+    const promptBox = document.getElementById('fl-drop-prompt');
+    const imgEl = document.getElementById('fl-img-preview');
+    if (imgEl && previewBox) {
+        imgEl.src = dataUrl;
+        previewBox.style.display = 'flex';
+        promptBox.style.display = 'none';
+    }
+}
+
+function clearFlashImgPreview() {
+    tempFlashImgData = '';
+    const previewBox = document.getElementById('fl-img-preview-box');
+    const promptBox = document.getElementById('fl-drop-prompt');
+    const imgEl = document.getElementById('fl-img-preview');
+    const imgInput = document.getElementById('fl-img-input');
+    if (imgEl) imgEl.src = '';
+    if (imgInput) imgInput.value = '';
+    if (previewBox) previewBox.style.display = 'none';
+    if (promptBox) promptBox.style.display = 'block';
+}
+
+function saveFlashFinding() {
+    const gd = window.GLOBAL_MC_DATA;
+    if (!gd) return;
+    if (!gd.globalFlashReports) gd.globalFlashReports = [];
+
+    const tag = document.getElementById('fl-tag').value.trim();
+    const subsys = document.getElementById('fl-subsys').value.trim();
+    const desc = document.getElementById('fl-desc').value.trim();
+    const disc = document.getElementById('fl-disc').value;
+    const date = document.getElementById('fl-date').value;
+    const status = document.getElementById('fl-status').value;
+    const inspDesc = document.getElementById('fl-insp-desc').value.trim();
+    const note = document.getElementById('fl-note').value.trim();
+    const response = document.getElementById('fl-response').value.trim();
+    const respType = document.getElementById('fl-resp-type').value;
+    const editId = parseInt(document.getElementById('flash-edit-id').value, 10);
+
+    if (!tag || !inspDesc) {
+        alert('Please fill in Tag No and Inspection Description!');
+        return;
+    }
+
+    if (editId > 0) {
+        const found = gd.globalFlashReports.find(f => f.id === editId);
+        if (found) {
+            found.tag = tag;
+            found.subsys = subsys;
+            found.desc = desc;
+            found.disc = disc;
+            found.date = date;
+            found.status = status;
+            found.inspDesc = inspDesc;
+            found.note = note;
+            found.response = response;
+            found.respType = respType;
+            if (tempFlashImgData !== undefined) found.img = tempFlashImgData;
+        }
+    } else {
+        const newId = Date.now();
+        gd.globalFlashReports.push({
+            id: newId,
+            tag: tag,
+            subsys: subsys,
+            desc: desc,
+            disc: disc,
+            date: date,
+            status: status,
+            inspDesc: inspDesc,
+            note: note,
+            img: tempFlashImgData || '',
+            response: response,
+            respType: respType
+        });
+    }
+
+    document.getElementById('flash-modal').style.display = 'none';
+    renderFlashReports();
+    document.getElementById('btn-save-data').style.display = 'inline-flex';
+    alert('Flash Finding saved! Click "Save Data" on top to permanently keep it in data.json.');
+}
+
+function renderFlashReports() {
+    const gd = window.GLOBAL_MC_DATA;
+    if (!gd) return;
+    const list = gd.globalFlashReports || [];
+
+    const disc = document.getElementById('flash-filter-disc') ? document.getElementById('flash-filter-disc').value : 'ALL';
+    const status = document.getElementById('flash-filter-status') ? document.getElementById('flash-filter-status').value : 'ALL';
+    const q = document.getElementById('flash-search') ? (document.getElementById('flash-search').value || '').trim().toLowerCase() : '';
+
+    const filtered = list.filter(item => {
+        if (disc !== 'ALL' && item.disc !== disc) return false;
+        if (status !== 'ALL' && item.status !== status) return false;
+        if (q) {
+            const m = (item.tag && item.tag.toLowerCase().includes(q)) ||
+                      (item.desc && item.desc.toLowerCase().includes(q)) ||
+                      (item.subsys && item.subsys.toLowerCase().includes(q)) ||
+                      (item.inspDesc && item.inspDesc.toLowerCase().includes(q)) ||
+                      (item.note && item.note.toLowerCase().includes(q)) ||
+                      (item.response && item.response.toLowerCase().includes(q));
+            if (!m) return false;
+        }
+        return true;
+    });
+
+    currentFilteredFlash = filtered;
+
+    // Update KPI stats
+    const openCount = filtered.filter(f => f.status === 'Open').length;
+    const closedCount = filtered.filter(f => f.status === 'Closed').length;
+
+    if (document.getElementById('flash-kpi-total')) document.getElementById('flash-kpi-total').textContent = filtered.length;
+    if (document.getElementById('flash-kpi-open')) document.getElementById('flash-kpi-open').textContent = openCount;
+    if (document.getElementById('flash-kpi-closed')) document.getElementById('flash-kpi-closed').textContent = closedCount;
+    if (document.getElementById('flash-kpi-disc')) document.getElementById('flash-kpi-disc').textContent = disc;
+
+    const tbody = document.getElementById('flash-tbody');
+    if (!tbody) return;
+
+    if (filtered.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding: 2rem; color: #64748b;">No Flash Report findings found for the selected filter. Click "+ New Finding" to create one.</td></tr>`;
+        return;
+    }
+
+    let html = '';
+    filtered.forEach((item, idx) => {
+        const isClosed = item.status === 'Closed';
+        const stBg = isClosed ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)';
+        const stColor = isClosed ? '#10b981' : '#ef4444';
+
+        // Response box styling matching screenshot
+        let respBg = 'rgba(255,255,255,0.05)';
+        let respColor = '#e2e8f0';
+        if (item.respType === 'green') {
+            respBg = 'rgba(16, 185, 129, 0.15)';
+            respColor = '#34d399';
+        } else if (item.respType === 'blue') {
+            respBg = 'rgba(14, 165, 233, 0.15)';
+            respColor = '#38bdf8';
+        } else if (item.respType === 'red') {
+            respBg = 'rgba(239, 68, 68, 0.15)';
+            respColor = '#f87171';
+        }
+
+        // Illustration thumbnail
+        let imgHtml = '<span style="color:#64748b; font-size:0.75rem;">No Image</span>';
+        if (item.img) {
+            imgHtml = `<img src="${item.img}" style="max-height: 48px; max-width: 80px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.2); cursor: pointer;" onclick="openFlashLightbox('${item.id}')" title="Click to view full image">`;
+        }
+
+        html += `
+            <tr>
+                <td style="color: #64748b; text-align: center;">${idx + 1}</td>
+                <td style="text-align: left; padding-left: 8px;">
+                    <b style="color: #fff;">${item.tag}</b><br>
+                    <span style="font-size: 0.8rem; color: #94a3b8;">${item.desc || ''}</span>
+                    ${item.subsys ? `<br><span style="font-size: 0.75rem; color: #38bdf8;">(Subsystem: ${item.subsys})</span>` : ''}
+                </td>
+                <td style="text-align: left; padding-left: 8px; line-height: 1.4; font-size: 0.85rem;">${item.inspDesc}</td>
+                <td style="text-align: left; padding-left: 8px; line-height: 1.4; font-size: 0.85rem; color: #cbd5e1;">${item.note || '-'}</td>
+                <td style="text-align: center;">${imgHtml}</td>
+                <td style="text-align: center;">
+                    <span class="badge" style="background: ${stBg}; color: ${stColor}; font-weight: 700;">${item.status}</span>
+                </td>
+                <td style="text-align: left; padding: 8px; background: ${respBg}; color: ${respColor}; font-size: 0.85rem; line-height: 1.4;">
+                    ${item.response || '-'}
+                </td>
+                <td style="text-align: center;">
+                    <button onclick="openEditFlashFinding(${item.id})" style="background:none; border:none; color:#38bdf8; cursor:pointer; padding:2px 4px;" title="Edit Finding">✏️</button>
+                    <button onclick="deleteFlashFinding(${item.id})" style="background:none; border:none; color:#ef4444; cursor:pointer; padding:2px 4px;" title="Delete Finding">🗑️</button>
+                </td>
+            </tr>
+        `;
+    });
+    tbody.innerHTML = html;
+}
+
+window.openEditFlashFinding = function(id) {
+    const gd = window.GLOBAL_MC_DATA;
+    if (!gd || !gd.globalFlashReports) return;
+    const item = gd.globalFlashReports.find(f => f.id === id);
+    if (!item) return;
+
+    document.getElementById('flash-edit-id').value = item.id;
+    document.getElementById('flash-modal-title').textContent = 'Edit Inspection Finding';
+    document.getElementById('fl-tag').value = item.tag || '';
+    document.getElementById('fl-subsys').value = item.subsys || '';
+    document.getElementById('fl-desc').value = item.desc || '';
+    document.getElementById('fl-disc').value = item.disc || 'MECHANICAL';
+    document.getElementById('fl-date').value = item.date || '';
+    document.getElementById('fl-status').value = item.status || 'Closed';
+    document.getElementById('fl-insp-desc').value = item.inspDesc || '';
+    document.getElementById('fl-note').value = item.note || '';
+    document.getElementById('fl-response').value = item.response || '';
+    document.getElementById('fl-resp-type').value = item.respType || 'green';
+
+    if (item.img) setFlashImgPreview(item.img);
+    else clearFlashImgPreview();
+
+    populateTagSuggestions();
+    document.getElementById('flash-modal').style.display = 'flex';
+};
+
+window.deleteFlashFinding = function(id) {
+    const gd = window.GLOBAL_MC_DATA;
+    if (!gd || !gd.globalFlashReports) return;
+    const item = gd.globalFlashReports.find(f => f.id === id);
+    if (!item) return;
+
+    if (confirm(`Delete Flash Finding for ${item.tag}?`)) {
+        gd.globalFlashReports = gd.globalFlashReports.filter(f => f.id !== id);
+        renderFlashReports();
+        document.getElementById('btn-save-data').style.display = 'inline-flex';
+    }
+};
+
+window.openFlashLightbox = function(id) {
+    const gd = window.GLOBAL_MC_DATA;
+    if (!gd || !gd.globalFlashReports) return;
+    const item = gd.globalFlashReports.find(f => f.id == id);
+    if (!item || !item.img) return;
+
+    const modal = document.getElementById('image-lightbox-modal');
+    const imgEl = document.getElementById('lightbox-img');
+    const capEl = document.getElementById('lightbox-caption');
+    if (modal && imgEl) {
+        imgEl.src = item.img;
+        if (capEl) capEl.textContent = `${item.tag} — ${item.desc || ''}`;
+        modal.style.display = 'flex';
+    }
+};
+
+function escapeHtml(str) {
+    if (!str) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
+async function exportFlashReportExcel() {
+    if (!currentFilteredFlash || currentFilteredFlash.length === 0) {
+        alert("No findings to export!");
+        return;
+    }
+
+    const disc = document.getElementById('flash-filter-disc').value;
+    const todayStr = formatDateDisplay(new Date());
+
+    // Check if ExcelJS is loaded
+    if (typeof ExcelJS === 'undefined') {
+        alert("ExcelJS library is loading, please try again in a moment.");
+        return;
+    }
+
+    try {
+        const workbook = new ExcelJS.Workbook();
+        workbook.creator = "Block B LQP Mechanical Completion";
+        workbook.lastModifiedBy = "Block B LQP Mechanical Completion";
+        workbook.created = new Date();
+        workbook.modified = new Date();
+
+        const worksheet = workbook.addWorksheet("Flash Report", {
+            views: [{ showGridLines: true }]
+        });
+
+        // Setup columns
+        worksheet.columns = [
+            { key: 'no', width: 6 },        // A: No
+            { key: 'tag', width: 28 },      // B: Tag & Subsystem
+            { key: 'desc', width: 38 },     // C: Inspection Description
+            { key: 'note', width: 32 },     // D: Note
+            { key: 'img', width: 26 },      // E: Illustration
+            { key: 'status', width: 12 },   // F: Status
+            { key: 'resp', width: 44 }      // G: Response
+        ];
+
+        const thinBorder = {
+            top: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+            left: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+            bottom: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+            right: { style: 'thin', color: { argb: 'FFCBD5E1' } }
+        };
+
+        const headerBorder = {
+            top: { style: 'thin', color: { argb: 'FF0F172A' } },
+            left: { style: 'thin', color: { argb: 'FF0F172A' } },
+            bottom: { style: 'thin', color: { argb: 'FF0F172A' } },
+            right: { style: 'thin', color: { argb: 'FF0F172A' } }
+        };
+
+        // Row 1: Title
+        worksheet.mergeCells('A1:G1');
+        const r1 = worksheet.getCell('A1');
+        r1.value = 'Report: ITR-A Inspection Finding';
+        r1.font = { name: 'Calibri', size: 12, bold: true, color: { argb: 'FF1E3A8A' } };
+        r1.alignment = { vertical: 'middle', horizontal: 'left' };
+        worksheet.getRow(1).height = 25;
+
+        // Row 2: System / Tag & Location
+        worksheet.mergeCells('A2:B2');
+        const a2 = worksheet.getCell('A2');
+        a2.value = 'System / Equipment Tag:';
+        a2.font = { name: 'Calibri', size: 10, bold: true };
+        a2.alignment = { vertical: 'middle', horizontal: 'left' };
+
+        worksheet.mergeCells('C2:D2');
+        const c2 = worksheet.getCell('C2');
+        c2.value = 'ITR-A Inspection';
+        c2.font = { name: 'Calibri', size: 10 };
+        c2.alignment = { vertical: 'middle', horizontal: 'left' };
+
+        const e2 = worksheet.getCell('E2');
+        e2.value = 'Location:';
+        e2.font = { name: 'Calibri', size: 10, bold: true };
+        e2.alignment = { vertical: 'middle', horizontal: 'left' };
+
+        worksheet.mergeCells('F2:G2');
+        const f2 = worksheet.getCell('F2');
+        f2.value = 'LQP Topside';
+        f2.font = { name: 'Calibri', size: 10 };
+        f2.alignment = { vertical: 'middle', horizontal: 'left' };
+        worksheet.getRow(2).height = 20;
+
+        // Row 3: Updated Report Date & Discipline
+        worksheet.mergeCells('A3:B3');
+        const a3 = worksheet.getCell('A3');
+        a3.value = 'Updated Report Date:';
+        a3.font = { name: 'Calibri', size: 10, bold: true };
+        a3.alignment = { vertical: 'middle', horizontal: 'left' };
+
+        worksheet.mergeCells('C3:D3');
+        const c3 = worksheet.getCell('C3');
+        c3.value = todayStr;
+        c3.font = { name: 'Calibri', size: 10 };
+        c3.alignment = { vertical: 'middle', horizontal: 'left' };
+
+        const e3 = worksheet.getCell('E3');
+        e3.value = 'Discipline:';
+        e3.font = { name: 'Calibri', size: 10, bold: true };
+        e3.alignment = { vertical: 'middle', horizontal: 'left' };
+
+        worksheet.mergeCells('F3:G3');
+        const f3 = worksheet.getCell('F3');
+        f3.value = disc;
+        f3.font = { name: 'Calibri', size: 10 };
+        f3.alignment = { vertical: 'middle', horizontal: 'left' };
+        worksheet.getRow(3).height = 20;
+
+        // Row 4: Section Banner "Detail of Inspection"
+        worksheet.mergeCells('A4:G4');
+        const r4 = worksheet.getCell('A4');
+        r4.value = 'Detail of Inspection';
+        r4.font = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FF1E293B' } };
+        r4.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFE2E8F0' }
+        };
+        r4.alignment = { vertical: 'middle', horizontal: 'center' };
+        worksheet.getRow(4).height = 22;
+
+        // Row 5: Column Headers
+        const headers = ['No', 'Tag', 'Inspection Description', 'Note', 'Illustration', 'Status', 'Response'];
+        const r5 = worksheet.getRow(5);
+        r5.height = 24;
+        headers.forEach((h, idx) => {
+            const cell = r5.getCell(idx + 1);
+            cell.value = h;
+            cell.font = { name: 'Calibri', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
+            cell.fill = {
+                type: 'pattern',
+                pattern: 'solid',
+                fgColor: { argb: 'FF1E3A8A' }
+            };
+            cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+            cell.border = headerBorder;
+        });
+
+        // Rows 6+: Data rows
+        for (let i = 0; i < currentFilteredFlash.length; i++) {
+            const item = currentFilteredFlash[i];
+            const rowNumber = 6 + i;
+            const row = worksheet.getRow(rowNumber);
+
+            const hasImage = Boolean(item.img && item.img.startsWith('data:image'));
+            row.height = hasImage ? 85 : 44;
+
+            const tagFormatted = `${item.tag || ''}${item.desc ? `\n${item.desc}` : ''}${item.subsys ? `\n(Subsystem: ${item.subsys})` : ''}`.trim();
+
+            // Col 1: No
+            const c1 = row.getCell(1);
+            c1.value = i + 1;
+            c1.alignment = { vertical: 'middle', horizontal: 'center' };
+            c1.border = thinBorder;
+            c1.font = { name: 'Calibri', size: 10 };
+
+            // Col 2: Tag
+            const c2 = row.getCell(2);
+            c2.value = tagFormatted;
+            c2.alignment = { vertical: 'middle', horizontal: 'left', wrapText: true };
+            c2.border = thinBorder;
+            c2.font = { name: 'Calibri', size: 10 };
+
+            // Col 3: Inspection Description
+            const c3 = row.getCell(3);
+            c3.value = item.inspDesc || '-';
+            c3.alignment = { vertical: 'middle', horizontal: 'left', wrapText: true };
+            c3.border = thinBorder;
+            c3.font = { name: 'Calibri', size: 10 };
+
+            // Col 4: Note
+            const c4 = row.getCell(4);
+            c4.value = item.note || '-';
+            c4.alignment = { vertical: 'middle', horizontal: 'left', wrapText: true };
+            c4.border = thinBorder;
+            c4.font = { name: 'Calibri', size: 10 };
+
+            // Col 5: Illustration
+            const c5 = row.getCell(5);
+            c5.alignment = { vertical: 'middle', horizontal: 'center' };
+            c5.border = thinBorder;
+            c5.font = { name: 'Calibri', size: 10 };
+
+            if (hasImage) {
+                c5.value = ''; // Clean background for image
+                try {
+                    let extension = 'png';
+                    if (item.img.includes('data:image/jpeg') || item.img.includes('data:image/jpg')) {
+                        extension = 'jpeg';
+                    } else if (item.img.includes('data:image/gif')) {
+                        extension = 'gif';
+                    }
+                    const parts = item.img.split(',');
+                    const base64Data = parts[1] || parts[0];
+
+                    const imageId = workbook.addImage({
+                        base64: base64Data,
+                        extension: extension
+                    });
+
+                    // Col 4 is 0-indexed column E
+                    worksheet.addImage(imageId, {
+                        tl: { col: 4.12, row: (rowNumber - 1) + 0.08 },
+                        ext: { width: 155, height: 95 },
+                        editAs: 'oneCell'
+                    });
+                } catch (imgErr) {
+                    console.error("Failed to embed image:", imgErr);
+                    c5.value = '[Image]';
+                }
+            } else {
+                c5.value = '-';
+            }
+
+            // Col 6: Status
+            const c6 = row.getCell(6);
+            const statusVal = item.status || 'Closed';
+            c6.value = statusVal;
+            c6.alignment = { vertical: 'middle', horizontal: 'center' };
+            c6.border = thinBorder;
+            if (statusVal.toLowerCase() === 'closed') {
+                c6.fill = {
+                    type: 'pattern',
+                    pattern: 'solid',
+                    fgColor: { argb: 'FFD1FAE5' }
+                };
+                c6.font = { name: 'Calibri', size: 10, bold: true, color: { argb: 'FF065F46' } };
+            } else {
+                c6.fill = {
+                    type: 'pattern',
+                    pattern: 'solid',
+                    fgColor: { argb: 'FFFEE2E2' }
+                };
+                c6.font = { name: 'Calibri', size: 10, bold: true, color: { argb: 'FF991B1B' } };
+            }
+
+            // Col 7: Response
+            const c7 = row.getCell(7);
+            c7.value = item.response || '-';
+            c7.alignment = { vertical: 'middle', horizontal: 'left', wrapText: true };
+            c7.border = thinBorder;
+            c7.font = { name: 'Calibri', size: 10 };
+
+            if (item.respType === 'green') {
+                c7.fill = {
+                    type: 'pattern',
+                    pattern: 'solid',
+                    fgColor: { argb: 'FFD1FAE5' }
+                };
+                c7.font = { name: 'Calibri', size: 10, color: { argb: 'FF065F46' } };
+            } else if (item.respType === 'blue') {
+                c7.fill = {
+                    type: 'pattern',
+                    pattern: 'solid',
+                    fgColor: { argb: 'FFE0F2FE' }
+                };
+                c7.font = { name: 'Calibri', size: 10, color: { argb: 'FF0369A1' } };
+            } else if (item.respType === 'red') {
+                c7.fill = {
+                    type: 'pattern',
+                    pattern: 'solid',
+                    fgColor: { argb: 'FFFEE2E2' }
+                };
+                c7.font = { name: 'Calibri', size: 10, color: { argb: 'FFB91C1C' } };
+            }
+        }
+
+        const buffer = await workbook.xlsx.writeBuffer();
+        const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `ITR_A_Inspection_Finding_${disc}_${todayStr.replace(/\s+/g, '_')}.xlsx`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    } catch (err) {
+        console.error("Export Excel error:", err);
+        alert("Failed to export Excel file: " + err.message);
+    }
+}
+
+function printFlashReport() {
+    if (!currentFilteredFlash || currentFilteredFlash.length === 0) {
+        alert("No findings to print!");
+        return;
+    }
+
+    const disc = document.getElementById('flash-filter-disc').value;
+    const todayStr = formatDateDisplay(new Date());
+    const nowTimeStr = new Date().toLocaleTimeString('en-GB');
+
+    const printDoc = document.getElementById('flash-print-doc');
+    if (!printDoc) {
+        window.print();
+        return;
+    }
+
+    let rowsHtml = '';
+    currentFilteredFlash.forEach((item, idx) => {
+        const isClosed = (item.status || 'Closed').toLowerCase() === 'closed';
+        const statusBadgeClass = isClosed ? 'flash-print-status-closed' : 'flash-print-status-open';
+
+        let respBoxClass = '';
+        if (item.respType === 'green') respBoxClass = 'flash-print-resp-green';
+        else if (item.respType === 'blue') respBoxClass = 'flash-print-resp-blue';
+        else if (item.respType === 'red') respBoxClass = 'flash-print-resp-red';
+
+        const imgHtml = item.img 
+            ? `<img src="${item.img}" class="flash-print-img" alt="Illustration">`
+            : '<span style="color:#94a3b8;">-</span>';
+
+        rowsHtml += `
+            <tr>
+                <td style="text-align: center; font-weight: 700; width: 4%;">${idx + 1}</td>
+                <td style="width: 20%; word-break: break-word;">
+                    <div style="font-weight: 700; color: #0f172a;">${escapeHtml(item.tag || '')}</div>
+                    ${item.desc ? `<div style="color: #475569; font-size: 8pt; margin-top: 2px;">${escapeHtml(item.desc)}</div>` : ''}
+                    ${item.subsys ? `<div style="color: #0284c7; font-size: 7.5pt; font-weight: 600; margin-top: 2px;">Subsystem: ${escapeHtml(item.subsys)}</div>` : ''}
+                </td>
+                <td style="width: 25%; white-space: pre-wrap; word-break: break-word;">${escapeHtml(item.inspDesc || '-')}</td>
+                <td style="width: 19%; color: #334155; white-space: pre-wrap; word-break: break-word;">${escapeHtml(item.note || '-')}</td>
+                <td style="width: 15%; text-align: center;">${imgHtml}</td>
+                <td style="width: 7%; text-align: center;">
+                    <span class="flash-print-status ${statusBadgeClass}">${escapeHtml(item.status || 'Closed')}</span>
+                </td>
+                <td style="width: 20%; word-break: break-word;">
+                    ${item.response ? `<div class="flash-print-resp-box ${respBoxClass}" style="white-space: pre-wrap;">${escapeHtml(item.response)}</div>` : '<span style="color:#94a3b8;">-</span>'}
+                </td>
+            </tr>
+        `;
+    });
+
+    printDoc.innerHTML = `
+        <div class="flash-print-header">
+            <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 6px;">
+                <div class="flash-print-title" style="margin: 0;">Report: ITR-A Inspection Finding</div>
+                <div style="font-size: 8pt; color: #64748b; font-weight: 600;">BLOCK B LQP &bull; TOP-SECRET / INTERNAL USE</div>
+            </div>
+            
+            <table class="flash-print-meta-table">
+                <tr>
+                    <td class="flash-print-meta-lbl">System / Equipment Tag:</td>
+                    <td class="flash-print-meta-val">ITR-A Inspection</td>
+                    <td class="flash-print-meta-lbl">Location:</td>
+                    <td class="flash-print-meta-val">LQP Topside</td>
+                </tr>
+                <tr>
+                    <td class="flash-print-meta-lbl">Updated Report Date:</td>
+                    <td class="flash-print-meta-val">${todayStr}</td>
+                    <td class="flash-print-meta-lbl">Discipline:</td>
+                    <td class="flash-print-meta-val">${disc}</td>
+                </tr>
+            </table>
+
+            <div class="flash-print-section-banner">Detail of Inspection</div>
+        </div>
+
+        <table class="flash-print-table">
+            <thead>
+                <tr>
+                    <th style="width: 4%;">No</th>
+                    <th style="width: 20%;">Tag</th>
+                    <th style="width: 25%;">Inspection Description</th>
+                    <th style="width: 19%;">Note</th>
+                    <th style="width: 15%;">Illustration</th>
+                    <th style="width: 7%;">Status</th>
+                    <th style="width: 20%;">Response</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${rowsHtml}
+            </tbody>
+        </table>
+
+        <div class="flash-print-footer">
+            <div>Block B LQP &bull; Mechanical Completion Management System</div>
+            <div>Printed on: ${todayStr} ${nowTimeStr} &bull; Total Findings: ${currentFilteredFlash.length}</div>
+        </div>
+    `;
+
+    // Trigger printing dialog
+    window.print();
 }
