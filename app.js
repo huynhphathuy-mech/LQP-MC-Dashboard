@@ -7,6 +7,25 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('modal-close').addEventListener('click', () => { document.getElementById('disc-modal').style.display = 'none'; });
     document.getElementById('punch-modal-close').addEventListener('click', () => { document.getElementById('punch-modal').style.display = 'none'; });
     document.getElementById('cert-modal-close').addEventListener('click', () => { document.getElementById('cert-modal').style.display = 'none'; });
+    
+    // Checksheet Modal Close & Outside Click
+    const csModal = document.getElementById('checksheet-modal');
+    const csClose = document.getElementById('checksheet-modal-close');
+    if (csClose && csModal) {
+        csClose.addEventListener('click', () => { csModal.style.display = 'none'; });
+        csModal.addEventListener('click', (e) => {
+            if (e.target === csModal) csModal.style.display = 'none';
+        });
+    }
+
+    // Global ESC key to close any open modal
+    window.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            document.querySelectorAll('.modal-overlay').forEach(m => {
+                if (m.style.display !== 'none') m.style.display = 'none';
+            });
+        }
+    });
 
     // Save Data Button
     document.getElementById('btn-save-data').addEventListener('click', exportData);
@@ -21,6 +40,7 @@ document.addEventListener('DOMContentLoaded', () => {
     setupFilters();
     setupReports();
     setupFlashReport();
+    setupChecksheetModalEvents();
 });
 
 // ==========================================
@@ -102,18 +122,24 @@ function exportData() {
         data: window.GLOBAL_MC_DATA
     };
 
-    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportObj));
+    const jsonStr = JSON.stringify(exportObj);
+    const blob = new Blob([jsonStr], { type: "application/json;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
     const downloadAnchorNode = document.createElement('a');
-    downloadAnchorNode.setAttribute("href", dataStr);
+    downloadAnchorNode.setAttribute("href", url);
     downloadAnchorNode.setAttribute("download", "data.json");
     document.body.appendChild(downloadAnchorNode); // required for firefox
     downloadAnchorNode.click();
     downloadAnchorNode.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 function applyLoadedData(dataObj, updateDateStr) {
     if (!dataObj) return;
     window.GLOBAL_MC_DATA = dataObj;
+    if (!window.GLOBAL_MC_DATA.globalChecksheetMap) {
+        window.GLOBAL_MC_DATA.globalChecksheetMap = {};
+    }
     
     const { mcData, dashGroups, matrix, sumItr, sumPunch, sumDac, sumCssc, skyData } = window.GLOBAL_MC_DATA;
     
@@ -189,10 +215,40 @@ async function loadDefaultData() {
             }
         }
     } catch (e) {
-        console.log("fetch('data.json') unavailable on file:// protocol. Checking local IndexedDB cache...");
+        console.log("fetch('data.json') unavailable on file:// protocol. Checking local preloaded or IndexedDB cache...");
     }
 
-    // 2. If fetch fails (running as file:/// on drive E), automatically load from IndexedDB!
+    // 2. Check window.PRELOADED_MC_DATA (instant, zero CORS, works directly on file:/// and offline)
+    if (!loaded && window.PRELOADED_MC_DATA && window.PRELOADED_MC_DATA.data) {
+        // If IndexedDB has saved modifications (like new flash reports or manual completions), merge them
+        try {
+            const cached = await loadFromDB('global_mc_data');
+            if (cached && cached.data) {
+                if (cached.data.globalFlashReports && cached.data.globalFlashReports.length > 0) {
+                    window.PRELOADED_MC_DATA.data.globalFlashReports = cached.data.globalFlashReports;
+                }
+                if (cached.data.globalCompletedChecksheets) {
+                    const cachedManuals = cached.data.globalCompletedChecksheets.filter(x => x.isManual);
+                    if (cachedManuals.length > 0 && window.PRELOADED_MC_DATA.data.globalCompletedChecksheets) {
+                        cachedManuals.forEach(m => {
+                            if (!window.PRELOADED_MC_DATA.data.globalCompletedChecksheets.some(x => x.tag === m.tag && x.formNo === m.formNo)) {
+                                window.PRELOADED_MC_DATA.data.globalCompletedChecksheets.push(m);
+                            }
+                        });
+                    }
+                }
+            }
+        } catch (mErr) {
+            console.warn("Merge cached error:", mErr);
+        }
+
+        applyLoadedData(window.PRELOADED_MC_DATA.data, `${window.PRELOADED_MC_DATA.updateDate || 'Latest'}`);
+        saveToDB('global_mc_data', window.PRELOADED_MC_DATA);
+        loaded = true;
+        return;
+    }
+
+    // 3. Fallback to IndexedDB cache
     if (!loaded) {
         try {
             const cached = await loadFromDB('global_mc_data');
@@ -286,7 +342,7 @@ function getValueRobust(row, possibleKeys) {
     return '';
 }
 
-const DISCIPLINES = ['MECHANICAL', 'HVAC', 'PIPING', 'ELECTRICAL', 'INSTRUMENT', 'TELECOM', 'ARCHITECTURE', 'STRUCTURE', 'SAFETY'];
+const DISCIPLINES = ['MECHANICAL', 'PIPING', 'ELECTRICAL', 'INSTRUMENT', 'TELECOM', 'STRUCTURE', 'ARCHITECTURE', 'HVAC', 'SAFETY'];
 
 function classifyDiscipline(discStr) {
     const s = String(discStr).toUpperCase().replace(/\s/g, '');
@@ -440,6 +496,7 @@ function setupFileUpload() {
         let globalCertList = [];
         let globalTagMap = {};
         let globalCompletedChecksheets = [];
+        let globalChecksheetMap = {};
 
         // Pre-fill sumItr with correctly ordered DISCIPLINES
         DISCIPLINES.forEach(d => sumItr[d] = {d:0, t:0});
@@ -484,7 +541,7 @@ function setupFileUpload() {
                         if (!subsys) return;
                         const subStr = String(subsys).trim();
                         
-                        const desc = getValueRobust(row, ['SubSystemDesc', 'Description', 'SystemDesc']);
+                        const desc = getValueRobust(row, ['SubSystemDescription', 'SubSystemDesc', 'Description', 'SystemDesc']);
                         if (desc && !sysDescMap[subStr]) sysDescMap[subStr] = String(desc).trim();
 
                         const sys = extractSystem(subsys);
@@ -507,6 +564,24 @@ function setupFileUpload() {
                         }
 
                         const tagNo = getValueRobust(row, ['TagNo', 'Tag No', 'EquipmentNo', 'Equipment No']);
+                        const rowNo = getValueRobust(row, ['No', 'ID']) || '';
+                        const tagDesc = getValueRobust(row, ['TagDescription', 'Description', 'EquipmentDescription', 'Tag Description']) || '-';
+                        const csFormType = String(getValueRobust(row, ['Checksheet Type', 'ChecksheetType']) || '').trim();
+
+                        // Store in full checksheet map for detail drill-down
+                        if (!globalChecksheetMap[subStr]) globalChecksheetMap[subStr] = {};
+                        if (!globalChecksheetMap[subStr][disc]) globalChecksheetMap[subStr][disc] = [];
+                        globalChecksheetMap[subStr][disc].push({
+                            no: rowNo || (globalChecksheetMap[subStr][disc].length + 1),
+                            subsys: subStr,
+                            subsysDesc: sysDescMap[subStr] || String(desc || '-').trim(),
+                            tag: tagNo ? String(tagNo).trim() : '',
+                            tagDesc: String(tagDesc).trim(),
+                            disc: disc,
+                            type: csFormType,
+                            compDate: isDone ? formatDateDisplay(compDate) : '',
+                            isDone: isDone
+                        });
 
                         if (isDone) {
                             globalCompletedChecksheets.push({
@@ -514,9 +589,9 @@ function setupFileUpload() {
                                 subsys: subStr,
                                 subsysDesc: sysDescMap[subStr] || String(desc || '-').trim(),
                                 disc: disc,
-                                formNo: String(getValueRobust(row, ['Checksheet Type', 'ChecksheetType']) || '').trim(),
+                                formNo: csFormType,
                                 tag: tagNo ? String(tagNo).trim() : '',
-                                tagDesc: String(getValueRobust(row, ['TagDescription', 'Description', 'EquipmentDescription', 'Tag Description']) || '-').trim(),
+                                tagDesc: String(tagDesc).trim(),
                                 compDate: compDate,
                                 dateStr: formatDateStr(compDate),
                                 week: wk
@@ -819,7 +894,7 @@ function setupFileUpload() {
             }
 
             // Global save for Modals
-            window.GLOBAL_MC_DATA = { mcData, dashGroups, matrix, sumItr, sumPunch, sumDac, sumCssc, skyData, sysDescMap, globalPunchList, globalCertList, globalTagMap, globalCompletedChecksheets, globalFlashReports };
+            window.GLOBAL_MC_DATA = { mcData, dashGroups, matrix, sumItr, sumPunch, sumDac, sumCssc, skyData, sysDescMap, globalPunchList, globalCertList, globalTagMap, globalCompletedChecksheets, globalFlashReports, globalChecksheetMap };
 
             const allWeeksSet = new Set([...Object.keys(skyData.itrPlanByWeek), ...Object.keys(skyData.itrActualByWeek)]);
             const allWeeks = Array.from(allWeeksSet).sort();
@@ -1038,6 +1113,31 @@ function renderCell(d, t, isRedZero) {
     `;
 }
 
+function renderItrCell(d, t, sub, disc) {
+    if (t === 0) return `<td class="dash">-</td>`;
+    const pct = ((d / t) * 100).toFixed(1);
+    let pctClass = '';
+    if (pct === '100.0') pctClass = 'pct-100';
+    else if (pct === '0.0') pctClass = 'pct-0';
+
+    return `
+        <td class="cell-interactive" onclick="openChecksheetDetail('${sub}', '${disc}')" title="Click to view ITR-A details for ${sub} (${disc})">
+            <div class="cell-val">
+                <span class="cell-nums">${d}/${t}</span>
+                <span class="cell-pct ${pctClass}">${pct}%</span>
+                <button class="cell-tool-btn" type="button" title="View checksheet list for ${sub} - ${disc}" onclick="event.stopPropagation(); openChecksheetDetail('${sub}', '${disc}')">
+                    <svg viewBox="0 0 24 24" width="11" height="11" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                        <polyline points="14 2 14 8 20 8"></polyline>
+                        <line x1="16" y1="13" x2="8" y2="13"></line>
+                        <line x1="16" y1="17" x2="8" y2="17"></line>
+                    </svg>
+                </button>
+            </div>
+        </td>
+    `;
+}
+
 function renderMatrix(matrix) {
     const tbody = document.getElementById('tbody-matrix');
     if (!tbody) return;
@@ -1071,7 +1171,7 @@ function renderMatrix(matrix) {
             
             DISCIPLINES.forEach(disc => {
                 const data = matrix[sys][sub][disc];
-                html += renderCell(data.i_d, data.i_t, false);
+                html += renderItrCell(data.i_d, data.i_t, sub, disc);
                 html += renderCell(data.pa_d, data.pa_t, true);
                 html += renderCell(data.pb_d, data.pb_t, false);
 
@@ -1360,7 +1460,7 @@ function openDisciplineModal(disc) {
     });
 
     document.getElementById('mdl-tbody').innerHTML = subTbodyHtml;
-    document.getElementById('mdl-table-title').innerHTML = `Tổng hợp theo Subsystem (${rowCount}) <span style="font-size:0.75rem; color:#64748b; font-weight:400; margin-left:10px;">Click 1 dòng để xem chi tiết (Coming soon)</span>`;
+    document.getElementById('mdl-table-title').innerHTML = `Subsystem Summary (${rowCount}) <span style="font-size:0.75rem; color:#64748b; font-weight:400; margin-left:10px;">Click row to view details (Coming soon)</span>`;
     
     // Update Top Boxes HTML
     const fPct = (d, t) => t > 0 ? ((d/t)*100).toFixed(1) + '%' : '0.0%';
@@ -1405,10 +1505,10 @@ function openDisciplineModal(disc) {
         data: {
             labels: chartLabels,
             datasets: [
-                { type: 'line', label: 'Lũy kế Actual', data: actLine, borderColor: '#f59e0b', backgroundColor: '#f59e0b', borderWidth: 2, yAxisID: 'y1', tension: 0.1, pointRadius: 3 },
-                { type: 'line', label: 'Lũy kế Plan', data: planLine, borderColor: '#3b82f6', backgroundColor: '#3b82f6', borderWidth: 2, yAxisID: 'y1', tension: 0.1, pointRadius: 3 },
-                { type: 'bar', label: 'ITR-A closed / ngày', data: actBar, backgroundColor: '#10b981', yAxisID: 'y', barPercentage: 0.8 },
-                { type: 'bar', label: 'Plan ITR-A / ngày', data: planBar, backgroundColor: '#ef4444', yAxisID: 'y', barPercentage: 0.8 }
+                { type: 'line', label: 'Cumulative Actual', data: actLine, borderColor: '#f59e0b', backgroundColor: '#f59e0b', borderWidth: 2, yAxisID: 'y1', tension: 0.1, pointRadius: 3 },
+                { type: 'line', label: 'Cumulative Plan', data: planLine, borderColor: '#3b82f6', backgroundColor: '#3b82f6', borderWidth: 2, yAxisID: 'y1', tension: 0.1, pointRadius: 3 },
+                { type: 'bar', label: 'ITR-A Closed / Week', data: actBar, backgroundColor: '#10b981', yAxisID: 'y', barPercentage: 0.8 },
+                { type: 'bar', label: 'Plan ITR-A / Week', data: planBar, backgroundColor: '#ef4444', yAxisID: 'y', barPercentage: 0.8 }
             ]
         },
         options: {
@@ -1557,6 +1657,251 @@ function openCertModal(type, group) {
     document.getElementById('cert-tbody').innerHTML = tbodyHtml;
 }
 
+// =========================================================================
+// ----------------- CHECKSHEET DETAIL MODAL LOGIC -------------------------
+// =========================================================================
+
+let currentCsSubsys = '';
+let currentCsDisc = '';
+let currentCsFilterStatus = 'ALL'; // 'ALL' | 'DONE' | 'PENDING'
+let currentCsSearch = '';
+let currentCsList = [];
+
+function openChecksheetDetail(subsys, disc) {
+    const gd = window.GLOBAL_MC_DATA;
+    if (!gd) return;
+
+    currentCsSubsys = subsys;
+    currentCsDisc = disc;
+    currentCsFilterStatus = 'ALL';
+    currentCsSearch = '';
+
+    // Reset filters UI
+    const searchInput = document.getElementById('cs-search-input');
+    if (searchInput) searchInput.value = '';
+
+    const btnAll = document.getElementById('cs-btn-filter-all');
+    const btnDone = document.getElementById('cs-btn-filter-done');
+    const btnPending = document.getElementById('cs-btn-filter-pending');
+    if (btnAll) btnAll.className = 'cs-tab-btn active';
+    if (btnDone) btnDone.className = 'cs-tab-btn';
+    if (btnPending) btnPending.className = 'cs-tab-btn';
+
+    // Retrieve checksheets from globalChecksheetMap
+    let list = [];
+    if (gd.globalChecksheetMap && gd.globalChecksheetMap[subsys] && gd.globalChecksheetMap[subsys][disc]) {
+        list = gd.globalChecksheetMap[subsys][disc].map(item => ({ ...item }));
+    }
+
+    // Merge manual completions if any
+    if (gd.globalCompletedChecksheets) {
+        gd.globalCompletedChecksheets.forEach(man => {
+            if (man.subsys === subsys && man.disc === disc) {
+                const existing = list.find(x => x.tag === man.tag && (!man.formNo || x.type === man.formNo));
+                if (existing) {
+                    existing.isDone = true;
+                    existing.compDate = man.dateStr || existing.compDate;
+                } else {
+                    list.push({
+                        no: list.length + 1,
+                        subsys: man.subsys,
+                        subsysDesc: man.subsysDesc || (gd.sysDescMap && gd.sysDescMap[subsys]) || '-',
+                        tag: man.tag,
+                        tagDesc: man.tagDesc || '-',
+                        disc: man.disc,
+                        type: man.formNo || 'ITR-A',
+                        compDate: man.dateStr || '',
+                        isDone: true
+                    });
+                }
+            }
+        });
+    }
+
+    currentCsList = list;
+
+    // Header info
+    const subsysDesc = (gd.sysDescMap && gd.sysDescMap[subsys]) || (list[0] && list[0].subsysDesc) || '';
+    const subsysLabel = subsysDesc ? `${subsys} — ${subsysDesc}` : subsys;
+    const modalSubsys = document.getElementById('cs-modal-subsys');
+    const modalDisc = document.getElementById('cs-modal-disc');
+    if (modalSubsys) modalSubsys.textContent = subsysLabel;
+    if (modalDisc) modalDisc.textContent = disc;
+
+    renderChecksheetModalTable();
+
+    const csModal = document.getElementById('checksheet-modal');
+    if (csModal) csModal.style.display = 'flex';
+}
+window.openChecksheetDetail = openChecksheetDetail;
+
+function renderChecksheetModalTable() {
+    const tbody = document.getElementById('cs-modal-tbody');
+    if (!tbody) return;
+
+    const total = currentCsList.length;
+    const done = currentCsList.filter(x => x.isDone).length;
+    const pending = total - done;
+    const pct = total > 0 ? ((done / total) * 100).toFixed(1) + '%' : '0.0%';
+
+    // Update chips
+    const statTotal = document.getElementById('cs-stat-total');
+    const statDone = document.getElementById('cs-stat-done');
+    const statPending = document.getElementById('cs-stat-pending');
+    const statPct = document.getElementById('cs-stat-pct');
+    if (statTotal) statTotal.textContent = total.toLocaleString();
+    if (statDone) statDone.textContent = done.toLocaleString();
+    if (statPending) statPending.textContent = pending.toLocaleString();
+    if (statPct) statPct.textContent = pct;
+
+    const btnAll = document.getElementById('cs-btn-filter-all');
+    const btnDone = document.getElementById('cs-btn-filter-done');
+    const btnPending = document.getElementById('cs-btn-filter-pending');
+    if (btnAll) btnAll.textContent = `All (${total})`;
+    if (btnDone) btnDone.textContent = `Completed (${done})`;
+    if (btnPending) btnPending.textContent = `Pending (${pending})`;
+
+    // Filter list
+    let filtered = currentCsList;
+    if (currentCsFilterStatus === 'DONE') {
+        filtered = filtered.filter(x => x.isDone);
+    } else if (currentCsFilterStatus === 'PENDING') {
+        filtered = filtered.filter(x => !x.isDone);
+    }
+
+    if (currentCsSearch) {
+        const q = currentCsSearch.toLowerCase();
+        filtered = filtered.filter(x =>
+            (x.tag && x.tag.toLowerCase().includes(q)) ||
+            (x.tagDesc && x.tagDesc.toLowerCase().includes(q)) ||
+            (x.type && x.type.toLowerCase().includes(q)) ||
+            (x.subsys && x.subsys.toLowerCase().includes(q)) ||
+            (String(x.no || '').includes(q))
+        );
+    }
+
+    if (filtered.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; padding: 3rem; color: #64748b;">No checksheets found matching the filter criteria.</td></tr>';
+        return;
+    }
+
+    let html = '';
+    filtered.forEach((item, idx) => {
+        const rowClass = item.isDone ? 'cs-table-row row-done' : 'cs-table-row';
+        const statusHtml = item.isDone
+            ? '<span class="status-badge-done"><svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" stroke-width="3" fill="none"><polyline points="20 6 9 17 4 12"/></svg> Completed</span>'
+            : '<span class="status-badge-pending">&#9679; Pending</span>';
+
+        html += `
+            <tr class="${rowClass}">
+                <td style="text-align: center; color: #94a3b8; padding: 0.65rem 0.5rem;">${item.no || (idx + 1)}</td>
+                <td style="font-weight: 600; color: #f8fafc; padding: 0.65rem 0.5rem;">${item.subsys}</td>
+                <td style="color: #cbd5e1; padding: 0.65rem 0.5rem;">${item.subsysDesc || '-'}</td>
+                <td style="font-weight: 600; color: #38bdf8; padding: 0.65rem 0.5rem;">${item.tag}</td>
+                <td style="color: #cbd5e1; padding: 0.65rem 0.5rem;">${item.tagDesc || '-'}</td>
+                <td style="padding: 0.65rem 0.5rem;"><span style="font-size: 0.75rem; background: rgba(255,255,255,0.06); padding: 2px 6px; border-radius: 4px; color: #cbd5e1;">${item.disc}</span></td>
+                <td style="padding: 0.65rem 0.5rem;"><span style="font-family: monospace; font-weight: 600; color: #fbbf24;">${item.type}</span></td>
+                <td style="color: ${item.compDate ? '#34d399' : '#64748b'}; font-weight: ${item.compDate ? '600' : 'normal'}; padding: 0.65rem 0.5rem;">${item.compDate || '-'}</td>
+                <td style="text-align: center; padding: 0.65rem 0.5rem;">${statusHtml}</td>
+            </tr>
+        `;
+    });
+
+    tbody.innerHTML = html;
+}
+
+function exportChecksheetsToExcel() {
+    if (!currentCsList || currentCsList.length === 0) {
+        alert("No checksheet data to export!");
+        return;
+    }
+
+    let exportList = currentCsList;
+    if (currentCsFilterStatus === 'DONE') exportList = exportList.filter(x => x.isDone);
+    else if (currentCsFilterStatus === 'PENDING') exportList = exportList.filter(x => !x.isDone);
+
+    if (currentCsSearch) {
+        const q = currentCsSearch.toLowerCase();
+        exportList = exportList.filter(x =>
+            (x.tag && x.tag.toLowerCase().includes(q)) ||
+            (x.tagDesc && x.tagDesc.toLowerCase().includes(q)) ||
+            (x.type && x.type.toLowerCase().includes(q)) ||
+            (x.subsys && x.subsys.toLowerCase().includes(q)) ||
+            (String(x.no || '').includes(q))
+        );
+    }
+
+    const rows = exportList.map((item, idx) => ({
+        'No': item.no || (idx + 1),
+        'SubSystemNo': item.subsys,
+        'SubSystemDescription': item.subsysDesc || '',
+        'TagNo': item.tag,
+        'TagDescription': item.tagDesc || '',
+        'Discipline': item.disc,
+        'Checksheet Type': item.type,
+        'CompleteDate': item.compDate || '',
+        'Status': item.isDone ? 'Completed' : 'Pending'
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Checksheets");
+
+    const safeSub = currentCsSubsys.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const safeDisc = currentCsDisc.replace(/[^a-zA-Z0-9_-]/g, '_');
+    XLSX.writeFile(wb, `Checksheets_ITRA_${safeSub}_${safeDisc}.xlsx`);
+}
+window.exportChecksheetsToExcel = exportChecksheetsToExcel;
+
+function setupChecksheetModalEvents() {
+    const btnAll = document.getElementById('cs-btn-filter-all');
+    const btnDone = document.getElementById('cs-btn-filter-done');
+    const btnPending = document.getElementById('cs-btn-filter-pending');
+    const searchInput = document.getElementById('cs-search-input');
+    const exportBtn = document.getElementById('btn-export-cs-excel');
+
+    const updateActiveTab = (activeBtn) => {
+        [btnAll, btnDone, btnPending].forEach(btn => {
+            if (btn) btn.className = 'cs-tab-btn';
+        });
+        if (activeBtn) activeBtn.className = 'cs-tab-btn active';
+    };
+
+    if (btnAll) {
+        btnAll.addEventListener('click', () => {
+            currentCsFilterStatus = 'ALL';
+            updateActiveTab(btnAll);
+            renderChecksheetModalTable();
+        });
+    }
+
+    if (btnDone) {
+        btnDone.addEventListener('click', () => {
+            currentCsFilterStatus = 'DONE';
+            updateActiveTab(btnDone);
+            renderChecksheetModalTable();
+        });
+    }
+
+    if (btnPending) {
+        btnPending.addEventListener('click', () => {
+            currentCsFilterStatus = 'PENDING';
+            updateActiveTab(btnPending);
+            renderChecksheetModalTable();
+        });
+    }
+
+    if (searchInput) {
+        searchInput.addEventListener('input', () => {
+            currentCsSearch = searchInput.value.trim();
+            renderChecksheetModalTable();
+        });
+    }
+
+    if (exportBtn) {
+        exportBtn.addEventListener('click', exportChecksheetsToExcel);
+    }
+}
 
 // =========================================================================
 // ----------------- REPORTS TAB LOGIC (WEEKLY & MONTHLY) ------------------

@@ -387,3 +387,85 @@ body {
         padding-top: 5px;
     }
 }
+
+/* Interactive Matrix Cell & Tool Button */
+.cell-interactive {
+    cursor: pointer !important;
+    position: relative;
+    transition: background-color 0.15s ease, box-shadow 0.15s ease;
+}
+.cell-interactive:hover {
+    background-color: rgba(14, 165, 233, 0.18) !important;
+    outline: 1px solid #0ea5e9;
+    z-index: 2;
+}
+.cell-tool-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 17px;
+    height: 17px;
+    margin-left: 5px;
+    padding: 0;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 3px;
+    color: #94a3b8;
+    cursor: pointer;
+    vertical-align: middle;
+    transition: all 0.15s ease;
+}
+.cell-interactive:hover .cell-tool-btn {
+    background: #0ea5e9;
+    border-color: #38bdf8;
+    color: #ffffff;
+    box-shadow: 0 0 6px rgba(14, 165, 233, 0.6);
+}
+.cell-tool-btn:hover {
+    transform: scale(1.15);
+}
+
+/* Checksheet Detail Modal Styling */
+.cs-table-row {
+    transition: background-color 0.15s ease;
+}
+.cs-table-row:hover {
+    background-color: rgba(255, 255, 255, 0.06) !important;
+}
+.cs-table-row.row-done {
+    background-color: rgba(16, 185, 129, 0.04);
+}
+.status-badge-done {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    background: rgba(16, 185, 129, 0.15);
+    color: #34d399;
+    border: 1px solid rgba(16, 185, 129, 0.35);
+}
+.status-badge-pending {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    background: rgba(239, 68, 68, 0.12);
+    color: #f87171;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+}
+.cs-tab-btn {
+    transition: all 0.2s;
+    outline: none;
+}
+.cs-tab-btn.active {
+    background: #0ea5e9 !important;
+    color: #fff !important;
+    font-weight: 600;
+}
+
