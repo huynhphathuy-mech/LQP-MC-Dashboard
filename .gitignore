@@ -7,6 +7,7 @@ _backup_original/
 scripts/debug_logs/
 scripts/_setup_and_inspect.py
 scripts/_verify_and_build_all.py
+scripts/_check_mech17.py
 __pycache__/
 *.pyc
 
