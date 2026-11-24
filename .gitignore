@@ -5,6 +5,7 @@
 # Local backups & debug files
 _backup_original/
 scripts/debug_logs/
+scripts/sync_history.log
 scripts/_setup_and_inspect.py
 scripts/_verify_and_build_all.py
 scripts/_check_mech17.py
