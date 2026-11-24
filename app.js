@@ -8407,7 +8407,9 @@ function restoreSiteWalkdownPunchesJson(file) {
             if (Array.isArray(data)) {
                 siteWalkdownPunches = data;
                 saveSiteWalkdownPunchesToStorage();
+                if (typeof recalculateMasterCounts === 'function') recalculateMasterCounts();
                 renderSiteWalkdownTab();
+                autoPersistCurrentData();
                 alert(`Successfully restored ${data.length} site walkdown findings!`);
             } else {
                 alert("Invalid backup file format. Expected a JSON array.");
