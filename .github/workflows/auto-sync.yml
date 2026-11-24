@@ -1,0 +1,73 @@
+name: Daily Auto-Sync PTSC PMS Data (3x Daily VN)
+
+on:
+  schedule:
+    # 08:00, 13:00, 17:30 Vietnam time (UTC+7)
+    - cron: '0 1 * * *'
+    - cron: '0 6 * * *'
+    - cron: '30 10 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pms-auto-sync
+  cancel-in-progress: false
+
+jobs:
+  sync-pms:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Python dependencies & Chromium
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          playwright install chromium
+          playwright install-deps chromium
+
+      - name: Download 4 Excel reports from PTSC PMS (LQ MODULE & LQ UTILITY)
+        env:
+          PMS_USERNAME: ${{ secrets.PMS_USERNAME }}
+          PMS_PASSWORD: ${{ secrets.PMS_PASSWORD }}
+        run: |
+          mkdir -p /tmp/pms_exports
+          python scripts/pms_auto_download.py --output-dir /tmp/pms_exports
+
+      - name: Build dashboard data (preserving manual_data.json)
+        run: |
+          python scripts/build_dashboard_data.py --excel-dir /tmp/pms_exports --source "Daily Auto-Sync (GitHub Actions)"
+
+      - name: Upload debug screenshots on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pms-debug-screenshots
+          path: scripts/debug_logs/
+          if-no-files-found: ignore
+
+      - name: Commit and push updated data to GitHub Pages
+        run: |
+          git config user.name "LQP Auto-Sync Bot"
+          git config user.email "actions@github.com"
+          git add data.json data.js sync_meta.json
+          if git diff --cached --quiet; then
+            echo "No data changes detected."
+          else
+            TZ='Asia/Ho_Chi_Minh' date_str=$(date '+%Y-%m-%d %H:%M VN')
+            git commit -m "Auto-Sync PTSC PMS Data ($date_str)"
+            git pull --rebase origin "${GITHUB_REF_NAME:-main}" || true
+            git push
+          fi
