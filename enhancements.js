@@ -450,27 +450,38 @@
     }
 
     // =========================================================================
-    // LIVE SYNC DATA BUTTON (NO-CACHE FETCH OF data.json + manual_data.json)
+    // LIVE SYNC DATA BUTTON (WORKS IDENTICALLY ON BOTH GITHUB PAGES & LOCAL index.html!)
     // =========================================================================
     async function syncLatestFromCloud(silent = false) {
         const btn = document.getElementById("btn-sync-cloud");
         if (btn) { btn.disabled = true; btn.innerHTML = "⏳ Syncing..."; }
         try {
             const bust = `t=${Date.now()}`;
-            const [resMain, resMan] = await Promise.all([
-                fetch(`data.json?${bust}`, { cache: "no-store" }),
-                fetch(`manual_data.json?${bust}`, { cache: "no-store" }).catch(() => null)
+            const isLocalFile = !window.location.protocol.startsWith("http");
+            const mainBase = isLocalFile ? LIVE_URL : "";
+            const rawManualUrl = `https://raw.githubusercontent.com/${activeGhConfig.owner}/${activeGhConfig.repo}/${activeGhConfig.branch}/manual_data.json?${bust}`;
+
+            const [resMain, resManRaw] = await Promise.all([
+                fetch(`${mainBase}data.json?${bust}`, { cache: "no-store" }),
+                fetch(rawManualUrl, { cache: "no-store" }).catch(() => null)
             ]);
             if (!resMain.ok) throw new Error(`HTTP ${resMain.status}`);
             const mainJson = await resMain.json();
             if (!mainJson || !mainJson.data) throw new Error("Invalid data.json format");
 
+            let manJson = null;
+            if (resManRaw && resManRaw.ok) {
+                manJson = await resManRaw.json();
+            } else {
+                const resManFallback = await fetch(`${mainBase}manual_data.json?${bust}`, { cache: "no-store" }).catch(() => null);
+                if (resManFallback && resManFallback.ok) manJson = await resManFallback.json();
+            }
+
             latestUpdatedAt = mainJson.updatedAt || mainJson.updateDate || "";
             latestSyncSource = mainJson.syncSource || "GitHub Cloud";
 
             window.GLOBAL_MC_DATA = mainJson.data;
-            if (resMan && resMan.ok) {
-                const manJson = await resMan.json();
+            if (manJson) {
                 mergeManualIntoGlobalData(manJson);
             }
             if (typeof applyLoadedData === "function") {
@@ -480,11 +491,21 @@
                 saveToDB("global_mc_data", { updateDate: mainJson.updateDate, updatedAt: latestUpdatedAt, data: window.GLOBAL_MC_DATA });
             }
             updateTimestampBadge();
-            if (!silent) showToast(`✅ Synced latest data (${latestUpdatedAt})`, "success");
+            if (!silent) showToast(`✅ Synced latest data from GitHub (${latestUpdatedAt})`, "success");
+            return true;
         } catch (err) {
-            if (!silent) {
-                showToast("Offline/local mode detected — using preloaded local data.", "warn");
+            // Fallback to preloaded local JS files when truly offline
+            if (window.PRELOADED_MANUAL_DATA && window.GLOBAL_MC_DATA) {
+                mergeManualIntoGlobalData(window.PRELOADED_MANUAL_DATA);
+                if (typeof recalculateMasterCounts === "function") recalculateMasterCounts();
+                if (typeof recalculatePrecomMasterCounts === "function") recalculatePrecomMasterCounts();
+                renderExecutiveSummary();
+                updateTimestampBadge();
             }
+            if (!silent) {
+                showToast("Offline mode — using local preloaded data on PC.", "warn");
+            }
+            return false;
         } finally {
             if (btn) { btn.disabled = false; btn.innerHTML = "🔄 Sync Data"; }
         }
@@ -1189,21 +1210,15 @@
         wrapAppLifecycle();
         attachColumnResizers();
 
-        // Merge preloaded manual_data.js (offline) or fetch latest manual_data.json (online)
+        // Always sync latest data.json + manual_data.json from GitHub on BOTH GitHub Pages & local index.html
+        // (automatically falls back to local data.js + manual_data.js if offline)
         setTimeout(async () => {
-            if (window.location.protocol.startsWith("http")) {
-                await syncLatestFromCloud(true);
-            } else if (window.PRELOADED_MANUAL_DATA && window.GLOBAL_MC_DATA) {
-                mergeManualIntoGlobalData(window.PRELOADED_MANUAL_DATA);
-                if (typeof recalculateMasterCounts === "function") recalculateMasterCounts();
-                if (typeof recalculatePrecomMasterCounts === "function") recalculatePrecomMasterCounts();
-                renderExecutiveSummary();
-                updateTimestampBadge();
-            } else if (window.GLOBAL_MC_DATA) {
+            const ok = await syncLatestFromCloud(true);
+            if (!ok && window.GLOBAL_MC_DATA) {
                 renderExecutiveSummary();
                 updateTimestampBadge();
             }
-        }, 350);
+        }, 300);
     }
 
     if (document.readyState === "loading") {
