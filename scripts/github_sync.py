@@ -202,29 +202,109 @@ def push_to_github(files, label="Manual PC Sync"):
 
 
 def setup_windows_task():
-    script_path = str(MC_DIR / "scripts" / "github_sync.py")
-    auto_bat = str(MC_DIR / "AUTO_SYNC_PMS_PC.bat")
-    py_exe = sys.executable
+    import tempfile
+    from xml.sax.saxutils import escape
 
-    tasks = [
-        ("LQP_MC_Dashboard_Pull_3h", ["schtasks", "/Create", "/F", "/TN", "LQP_MC_Dashboard_Pull_3h", "/SC", "HOURLY", "/MO", "3", "/TR", f'"{py_exe}" "{script_path}" pull']),
-        ("LQP_MC_Dashboard_PMS_0805", ["schtasks", "/Create", "/F", "/TN", "LQP_MC_Dashboard_PMS_0805", "/SC", "DAILY", "/ST", "08:05", "/TR", f'"{auto_bat}" --silent']),
-        ("LQP_MC_Dashboard_PMS_1305", ["schtasks", "/Create", "/F", "/TN", "LQP_MC_Dashboard_PMS_1305", "/SC", "DAILY", "/ST", "13:05", "/TR", f'"{auto_bat}" --silent']),
-        ("LQP_MC_Dashboard_PMS_1730", ["schtasks", "/Create", "/F", "/TN", "LQP_MC_Dashboard_PMS_1730", "/SC", "DAILY", "/ST", "17:30", "/TR", f'"{auto_bat}" --silent']),
-    ]
-    print("==> Setting up Windows Task Scheduler auto-sync jobs (Vietnam IP)...")
-    ok = 0
-    for name, cmd in tasks:
-        res = subprocess.run(cmd, capture_output=True, text=True)
-        if res.returncode == 0:
-            print(f"  [OK] Created task: {name}")
-            ok += 1
-        else:
-            print(f"  [WARN] Could not create {name}: {res.stderr.strip() or res.stdout.strip()}")
-    if ok == len(tasks):
-        print("\n[SUCCESS] All scheduled tasks created!")
-        print("  - Auto-sync PTSC PMS -> GitHub Pages at 08:05, 13:05, 17:30 daily (when PC is on)")
-        print("  - Auto-pull latest GitHub updates to PC every 3 hours")
+    mc_dir_str = str(MC_DIR)
+    py_exe = sys.executable
+    # Prefer pythonw.exe for silent background pull, python.exe for visible or logged PMS sync
+    pyw_exe = str(Path(py_exe).with_name("pythonw.exe"))
+    bg_py = pyw_exe if Path(pyw_exe).exists() else py_exe
+
+    # Clean up any legacy individual tasks first
+    for old_tn in ("LQP_MC_Dashboard_AutoSync_Pull", "LQP_MC_Dashboard_PMS_0805", "LQP_MC_Dashboard_PMS_1305", "LQP_MC_Dashboard_PMS_1730"):
+        subprocess.run(["schtasks", "/Delete", "/F", "/TN", old_tn], capture_output=True)
+
+    def register_xml_task(task_name, triggers_xml, command, arguments):
+        xml_content = f"""<?xml version="1.0" encoding="UTF-16"?>
+<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <RegistrationInfo>
+    <Description>LQP MC Dashboard Automated Sync ({escape(task_name)})</Description>
+  </RegistrationInfo>
+  <Triggers>
+    {triggers_xml}
+  </Triggers>
+  <Principals>
+    <Principal id="Author">
+      <LogonType>InteractiveToken</LogonType>
+      <RunLevel>LeastPrivilege</RunLevel>
+    </Principal>
+  </Principals>
+  <Settings>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+    <AllowHardTerminate>true</AllowHardTerminate>
+    <StartWhenAvailable>true</StartWhenAvailable>
+    <RunOnlyIfNetworkAvailable>true</RunOnlyIfNetworkAvailable>
+    <AllowStartOnDemand>true</AllowStartOnDemand>
+    <Enabled>true</Enabled>
+    <Hidden>false</Hidden>
+    <ExecutionTimeLimit>PT25M</ExecutionTimeLimit>
+    <Priority>7</Priority>
+  </Settings>
+  <Actions Context="Author">
+    <Exec>
+      <Command>{escape(command)}</Command>
+      <Arguments>{escape(arguments)}</Arguments>
+      <WorkingDirectory>{escape(mc_dir_str)}</WorkingDirectory>
+    </Exec>
+  </Actions>
+</Task>"""
+        with tempfile.NamedTemporaryFile("w", suffix=".xml", delete=False, encoding="utf-16") as tf:
+            tf.write(xml_content)
+            xml_path = tf.name
+        try:
+            res = subprocess.run(["schtasks", "/Create", "/F", "/TN", task_name, "/XML", xml_path], capture_output=True, text=True)
+            if res.returncode == 0:
+                print(f"  [OK] Created task: {task_name}")
+                return True
+            print(f"  [WARN] Failed {task_name}: {res.stderr.strip() or res.stdout.strip()}")
+            return False
+        finally:
+            try:
+                os.remove(xml_path)
+            except Exception:
+                pass
+
+    pms_triggers = """
+    <CalendarTrigger>
+      <StartBoundary>2026-01-01T08:05:00</StartBoundary>
+      <Enabled>true</Enabled>
+      <ScheduleByDay><DaysInterval>1</DaysInterval></ScheduleByDay>
+    </CalendarTrigger>
+    <CalendarTrigger>
+      <StartBoundary>2026-01-01T13:05:00</StartBoundary>
+      <Enabled>true</Enabled>
+      <ScheduleByDay><DaysInterval>1</DaysInterval></ScheduleByDay>
+    </CalendarTrigger>
+    <CalendarTrigger>
+      <StartBoundary>2026-01-01T17:30:00</StartBoundary>
+      <Enabled>true</Enabled>
+      <ScheduleByDay><DaysInterval>1</DaysInterval></ScheduleByDay>
+    </CalendarTrigger>
+    """
+
+    pull_triggers = """
+    <CalendarTrigger>
+      <Repetition><Interval>PT3H</Interval><StopAtDurationEnd>false</StopAtDurationEnd></Repetition>
+      <StartBoundary>2026-01-01T08:00:00</StartBoundary>
+      <Enabled>true</Enabled>
+      <ScheduleByDay><DaysInterval>1</DaysInterval></ScheduleByDay>
+    </CalendarTrigger>
+    """
+
+    print("==> Setting up Windows Task Scheduler (Battery-safe + Catch-up on Wake)...")
+    # IMPORTANT: Use python.exe (NOT pythonw.exe) for Playwright so Node.js subprocess stdio works cleanly!
+    ok1 = register_xml_task("LQP_MC_Dashboard_AutoSync_PMS", pms_triggers, py_exe, '"scripts\\run_auto_sync.py"')
+    ok2 = register_xml_task("LQP_MC_Dashboard_Pull_3h", pull_triggers, bg_py, '"scripts\\github_sync.py" pull')
+
+    if ok1 and ok2:
+        print("\n[SUCCESS] Windows Task Scheduler configured cleanly!")
+        print("  1. LQP_MC_Dashboard_AutoSync_PMS : Runs at 08:05, 13:05, 17:30 daily")
+        print("     - Works on battery & auto-catches up if laptop was asleep during lunch!")
+        print("     - Writes history log to: scripts\\sync_history.log")
+        print("  2. LQP_MC_Dashboard_Pull_3h      : Auto-pulls GitHub updates every 3 hours")
 
 
 def main():
