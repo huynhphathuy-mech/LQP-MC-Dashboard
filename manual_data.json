@@ -1,6 +1,76 @@
 {
-  "updatedAt": "2026-11-24 08:27:15",
+  "updatedAt": "2026-11-24 11:08:51 (VN)",
   "siteWalkdownPunches": [
+    {
+      "id": "SW-1794812082781",
+      "tagNo": "CLQU-CR-9101",
+      "equipName": "Pedestal Crane",
+      "cmsPunchTag": "CLQU-CR-9101",
+      "punchNo": "SW-004",
+      "tagDesc": "Pedestal Crane Package",
+      "sys": "CLQU-91",
+      "subsys": "CLQU-91-01",
+      "pkgName": "PQ-CPC0-MEC005-Pedestal Cranes",
+      "disc": "MECHANICAL",
+      "phase": "LQ-CON",
+      "cat": "B",
+      "status": "OPEN",
+      "cmsStatus": "PENDING_CMS",
+      "officialCmsPunchNo": "",
+      "desc": "Boom: Missing Cotter pin for Boom Pin, now using Temporary Cotter pin",
+      "actionBy": "MDR/VENDOR",
+      "openDate": "2026-11-16",
+      "closeDate": "",
+      "expDate": "2026-11-30",
+      "createdAt": "2026-11-16T06:54:42.781Z"
+    },
+    {
+      "id": "SW-1794811800128",
+      "tagNo": "CLQU-CR-9101",
+      "equipName": "Pedestal Crane",
+      "cmsPunchTag": "CLQU-CR-9101",
+      "punchNo": "SW-003",
+      "tagDesc": "Pedestal Crane Package",
+      "sys": "CLQU-91",
+      "subsys": "CLQU-91-01",
+      "pkgName": "PQ-CPC0-MEC005-Pedestal Cranes",
+      "disc": "MECHANICAL",
+      "phase": "LQ-CON",
+      "cat": "A",
+      "status": "OPEN",
+      "cmsStatus": "PENDING_CMS",
+      "officialCmsPunchNo": "",
+      "desc": "HPU: Diesel fuel tank is missing Magnet Sump",
+      "actionBy": "MDR/VENDOR",
+      "openDate": "2026-11-16",
+      "closeDate": "",
+      "expDate": "2026-11-30",
+      "createdAt": "2026-11-16T06:50:00.128Z",
+      "updatedAt": "2026-11-16T06:55:07.554Z"
+    },
+    {
+      "id": "SW-1794616840205",
+      "tagNo": "CLQU-V-5102",
+      "equipName": "Utility Air Receiver",
+      "cmsPunchTag": "CLQU-V-5102",
+      "punchNo": "SW-002",
+      "tagDesc": "UTILITY  AIR  RECEIVER",
+      "sys": "CLQU-51",
+      "subsys": "CLQU-51-04",
+      "pkgName": "PQ-CLQU-CON-HT-TP-51-04",
+      "disc": "MECHANICAL",
+      "phase": "LQ-CON",
+      "cat": "C",
+      "status": "OPEN",
+      "cmsStatus": "PENDING_CMS",
+      "officialCmsPunchNo": "",
+      "desc": "Touch up external painting",
+      "actionBy": "VSP CONS",
+      "openDate": "2026-11-14",
+      "closeDate": "",
+      "expDate": "2026-12-31",
+      "createdAt": "2026-11-14T00:40:40.205Z"
+    },
     {
       "id": "SW-1793789882413",
       "tagNo": "CLQU-V-5001",
@@ -20,9 +90,10 @@
       "desc": "External painting damaged.",
       "actionBy": "VSP Painting",
       "openDate": "2026-11-04",
-      "closeDate": "2027-02-04",
+      "closeDate": "",
       "expDate": "",
-      "createdAt": "2026-11-04T10:58:02.413Z"
+      "createdAt": "2026-11-04T10:58:02.413Z",
+      "updatedAt": "2026-11-16T06:55:28.014Z"
     }
   ],
   "globalFlashReports": [
@@ -69,44 +140,7 @@
       "respType": "red"
     }
   ],
-  "manualItrA": [
-    {
-      "sys": "51",
-      "subsys": "CLQU-51-04",
-      "subsysDesc": "Utility Air Receiver & Distribution",
-      "disc": "MECHANICAL",
-      "formNo": "M28-A",
-      "tag": "CLQU-SPTR-4551",
-      "tagDesc": "Liquid Drain Trap",
-      "dateStr": "2026-11-06",
-      "compDate": "2026-11-06",
-      "isManual": true
-    },
-    {
-      "sys": "51",
-      "subsys": "CLQU-51-04",
-      "subsysDesc": "Utility Air Receiver & Distribution",
-      "disc": "MECHANICAL",
-      "formNo": "M28-A",
-      "tag": "CLQU-SPKY-5151",
-      "tagDesc": "Valve Interlock",
-      "dateStr": "2026-11-06",
-      "compDate": "2026-11-06",
-      "isManual": true
-    },
-    {
-      "sys": "51",
-      "subsys": "CLQU-51-04",
-      "subsysDesc": "Utility Air Receiver & Distribution",
-      "disc": "MECHANICAL",
-      "formNo": "M28-A",
-      "tag": "CLQU-SPKY-5152",
-      "tagDesc": "Valve Interlock",
-      "dateStr": "2026-11-06",
-      "compDate": "2026-11-06",
-      "isManual": true
-    }
-  ],
+  "manualItrA": [],
   "manualItrB": [],
   "manualFtp": {},
   "subsysSkylineDates": {
