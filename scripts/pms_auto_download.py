@@ -29,24 +29,28 @@ REPORTS = [
         "menu_text": "Checksheet Overview",
         "url_path": "/PREC_ITR_Checksheet_Overview_Viewer",
         "filename": "BB_PREC_ChecksheetOverview_Report.xlsx",
+        "facilities": ["LQ MODULE", "LQ UTILITY"],
     },
     {
         "key": "certificate",
         "menu_text": "Certificate Overview",
         "url_path": "/PREC_Certificate_Overview_Viewer",
         "filename": "BB_PREC_CertificateOverview_Report.xlsx",
+        "facilities": ["LQ MODULE", "LQ UTILITY"],
     },
     {
         "key": "punchlist",
         "menu_text": "Punchlist Overview",
-        "url_path": "/PREC_Punchlist_Overview_Viewer",
+        "url_path": "/PREC_ITR_PunchList_Overview_Viewer",
         "filename": "BB_PREC_PunchlistOverview_Report.xlsx",
+        "facilities": ["LQ MODULE", "LQ UTILITY"],
     },
     {
         "key": "ftp",
         "menu_text": "FTP Overview",
-        "url_path": "/PREC_FTP_Overview_Viewer",
+        "url_path": "/PREC_WFR_FTPList_Viewer",
         "filename": "BB_PREC_FTP_Overview_Report.xlsx",
+        "facilities": ["LQ TOPSIDE"],
     },
 ]
 
@@ -85,8 +89,23 @@ def wait_blazor_ready(page, timeout_ms=45000):
 
 def login_pms(page, username, password, debug_dir):
     print(f"-> Opening {PMS_BASE_URL} ...")
-    page.goto(f"{PMS_BASE_URL}/PREC_ITR_Checksheet_Overview_Viewer", wait_until="domcontentloaded", timeout=60000)
+    resp = page.goto(f"{PMS_BASE_URL}/", wait_until="domcontentloaded", timeout=60000)
+    if resp and resp.status == 403:
+        save_debug(page, debug_dir, "00_403_forbidden")
+        raise RuntimeError(
+            "PTSC PMS server returned 403 Forbidden for this runner IP (cloud/foreign IP blocked by PTSC firewall). "
+            "Use AUTO_SYNC_PMS_PC.bat on your Vietnam PC or retry later."
+        )
     wait_blazor_ready(page)
+
+    # Also detect 403 rendered in page body
+    body_text = (page.locator("body").inner_text() or "").strip()
+    if "403 Forbidden" in body_text:
+        save_debug(page, debug_dir, "00_403_forbidden")
+        raise RuntimeError(
+            "PTSC PMS returned '403 Forbidden' to this cloud runner IP. "
+            "Run AUTO_SYNC_PMS_PC.bat on your local PC (Vietnam IP) instead."
+        )
 
     # Check if already logged in (sidebar View menu visible)
     if page.locator("text=Checksheet Overview").count() > 0 and page.locator("input[type='password']").count() == 0:
@@ -130,13 +149,13 @@ def login_pms(page, username, password, debug_dir):
     # Wait for either "Select project and facility" (NEXT >) screen OR main portal
     page.wait_for_timeout(3000)
     try:
-        page.wait_for_selector("button:has-text('NEXT'), button:has-text('Next'), text=Select project and facility, text=Checksheet Overview, text=View", timeout=45000)
+        page.wait_for_selector("button:has-text('NEXT'), button:has-text('Next'), a:has-text('NEXT'), :text('Select project and facility'), :text('Checksheet Overview')", timeout=45000)
     except Exception:
         save_debug(page, debug_dir, "02_after_login_timeout")
         raise RuntimeError("Login to PTSC PMS timed out before reaching project selector or portal.")
 
     # Step 2 of Login: Handle "Select project and facility" -> click blue "NEXT >" button
-    next_btn = page.locator("button:has-text('NEXT'), button:has-text('Next')").first
+    next_btn = page.locator("button:has-text('NEXT'), button:has-text('Next'), a:has-text('NEXT')").first
     if next_btn.count() > 0 and next_btn.is_visible():
         print("-> 'Select project and facility' screen detected (ProjectCode=BB). Clicking 'NEXT >'...")
         next_btn.click()
@@ -145,7 +164,7 @@ def login_pms(page, username, password, debug_dir):
 
     # Wait for sidebar 'View' or 'Checksheet Overview'
     try:
-        page.wait_for_selector("text=View, text=Checksheet Overview, text=Dashboard", timeout=45000)
+        page.wait_for_selector(":text('Checksheet Overview'), :text('Dashboard'), a:has-text('View'), span:has-text('View')", timeout=45000)
     except Exception:
         save_debug(page, debug_dir, "03_after_next_failed")
         raise RuntimeError("Clicked NEXT > but main portal did not load.")
@@ -164,77 +183,132 @@ def login_pms(page, username, password, debug_dir):
     print("-> Logged in to PTSC PMS and reached main portal successfully!")
 
 
-def select_lq_facilities(page, debug_dir, report_key):
-    """Opens FacilityCode modal, selects LQ MODULE & LQ UTILITY, clicks SELECT."""
-    # Look for the '...' picker button near FacilityCode label
-    opened = False
+def select_lq_facilities(page, debug_dir, report_key, target_facilities=None):
+    """Opens FacilityCode modal, selects target facilities, clicks SELECT."""
+    facilities = target_facilities or TARGET_FACILITIES
+    # Wait for the VISIBLE FacilityCode input on the current active view
+    fac_input = page.locator("input[aria-label='FacilityCode']:visible, input[aria-label*='Facility' i]:visible").first
     try:
-        # Strategy 1: Parent container containing FacilityCode text with a button/span '...'
-        fac_row = page.locator("div, td, label").filter(has_text="FacilityCode").locator("xpath=ancestor::div[1]")
-        dots = fac_row.locator("button, a, span, i").filter(has_text="...").first
-        if dots.count() > 0 and dots.is_visible():
-            dots.click()
-            opened = True
+        fac_input.wait_for(state="visible", timeout=20000)
     except Exception:
-        pass
+        save_debug(page, debug_dir, f"{report_key}_no_facility_input")
+        raise RuntimeError(f"Visible FacilityCode input not found on {report_key}")
 
-    if not opened:
-        # Strategy 2: Click first '...' button on filter panel (FacilityCode is top-left in PMS)
-        dots_all = page.locator("button:has-text('...'), span:has-text('...'), a:has-text('...')")
-        if dots_all.count() > 0:
-            dots_all.first.click()
-            opened = True
+    def modal_is_open():
+        return page.locator("button:has-text('SELECT'):visible, button:has-text('Select'):visible").count() > 0
 
-    if not opened:
-        # Strategy 3: Click FacilityCode input directly
-        inp = page.locator("input[placeholder*='Facility' i], input[aria-label*='Facility' i]").first
-        if inp.count() > 0:
-            inp.click()
-            opened = True
-
-    page.wait_for_timeout(1200)
-
-    # Wait for FacilityCode popup modal
-    modal = page.locator("div.modal:visible, div[role='dialog']:visible, .mud-dialog:visible, .b-modal:visible").last
-    scope = modal if modal.count() > 0 else page
-
-    for fac in TARGET_FACILITIES:
-        # Exact text match for facility cell (avoid matching 'LQ MODULE TEMP SUPPORT' or 'LQ JACKET')
-        exact_cell = scope.get_by_text(fac, exact=True).first
-        if exact_cell.count() == 0 or not exact_cell.is_visible():
-            # Try typing into modal search box if not immediately visible
-            modal_search = scope.locator("input[type='text'], input[type='search']").first
-            if modal_search.count() > 0 and modal_search.is_visible():
-                modal_search.fill("")
-                page.wait_for_timeout(200)
-                modal_search.fill(fac)
-                page.wait_for_timeout(700)
-            exact_cell = scope.get_by_text(fac, exact=True).first
-
-        if exact_cell.count() == 0:
-            save_debug(page, debug_dir, f"{report_key}_missing_{fac.replace(' ', '_')}")
-            raise RuntimeError(f"Could not find facility '{fac}' in FacilityCode modal for {report_key}")
-
-        row = exact_cell.locator("xpath=ancestor::tr[1]")
-        if row.count() == 0:
-            row = exact_cell.locator("xpath=ancestor::div[@role='row'][1]")
-
-        cb = row.locator("input[type='checkbox']").first if row.count() > 0 else exact_cell
-        if cb.count() > 0 and cb != exact_cell:
+    # Strategy 1: Click icon/button sibling next to the visible FacilityCode input (the '...' icon)
+    for anc in ("xpath=..", "xpath=../.."):
+        if modal_is_open():
+            break
+        container = fac_input.locator(anc)
+        btns = container.locator("button:visible, a:visible, i:visible, svg:visible, span.btn:visible, [role='button']:visible")
+        for idx in range(btns.count()):
             try:
-                if not cb.is_checked():
-                    cb.check(force=True)
+                btns.nth(idx).click(timeout=3000)
+                page.wait_for_timeout(800)
+                if modal_is_open():
+                    break
             except Exception:
-                cb.click(force=True)
-        else:
-            exact_cell.click()
-        page.wait_for_timeout(350)
+                pass
+
+    # Strategy 2: Click directly on the right edge of the FacilityCode container where '...' sits
+    if not modal_is_open():
+        try:
+            box = fac_input.locator("xpath=..").bounding_box()
+            if box:
+                page.mouse.click(box["x"] + box["width"] - 14, box["y"] + box["height"] / 2)
+                page.wait_for_timeout(1000)
+        except Exception:
+            pass
+
+    # Strategy 3: Click directly on the visible FacilityCode input itself
+    if not modal_is_open():
+        try:
+            fac_input.click(force=True)
+            page.wait_for_timeout(1000)
+        except Exception:
+            pass
+
+    if not modal_is_open():
+        save_debug(page, debug_dir, f"{report_key}_facility_modal_not_opened")
+        raise RuntimeError(f"Clicked FacilityCode on {report_key} but popup modal did not open.")
+
+    # Anchor strictly to the visible popup modal containing the SELECT button
+    select_btn = page.locator("button:has-text('SELECT'):visible, button:has-text('Select'):visible").last
+    select_btn.wait_for(state="visible", timeout=10000)
+
+    # Walk up from SELECT button to find the modal box containing both table/rows and SELECT button
+    scope = page
+    for up in range(2, 8):
+        cand = select_btn.locator(f"xpath=ancestor::div[{up}]")
+        if cand.count() > 0 and cand.locator("input[type='checkbox']").count() > 0:
+            scope = cand
+            break
+
+    # Type 'LQ' ONCE into modal search BEFORE checking any row so BOTH 'LQ MODULE' and 'LQ UTILITY'
+    # (or 'LQ TOPSIDE') are visible simultaneously
+    modal_search = scope.locator("input[type='text']:visible, input[type='search']:visible").first
+    if modal_search.count() > 0:
+        try:
+            modal_search.fill("LQ")
+            page.wait_for_timeout(900)
+        except Exception:
+            pass
+
+    for fac in facilities:
+        target_upper = fac.strip().upper()
+        # Use direct DOM inspection inside browser to normalize whitespace/nbsp/case
+        # and return exact (x, y) of the checkbox in the matching visible row
+        click_info = page.evaluate("""(target) => {
+            const norm = s => (s || '').replace(/\\u00a0/g, ' ').replace(/\\s+/g, ' ').trim().toUpperCase();
+            const isVis = el => {
+                if (!el) return false;
+                const r = el.getBoundingClientRect();
+                const st = window.getComputedStyle(el);
+                return r.width > 0 && r.height > 0 && st.visibility !== 'hidden' && st.display !== 'none';
+            };
+            const rows = Array.from(document.querySelectorAll('tr, [role="row"], .mud-table-row, .b-table-row'));
+            const seen = [];
+            for (const row of rows) {
+                if (!isVis(row)) continue;
+                const txt = norm(row.innerText);
+                if (txt) seen.push(txt);
+                if (txt === target) {
+                    const cb = row.querySelector('input[type="checkbox"], [role="checkbox"], label, .mud-checkbox, td:first-child');
+                    const targetEl = (cb && isVis(cb)) ? cb : (row.querySelector('td') || row);
+                    const rect = targetEl.getBoundingClientRect();
+                    return { found: true, x: rect.left + Math.min(rect.width / 2, 24), y: rect.top + rect.height / 2, text: txt };
+                }
+            }
+            // Fallback: check individual cells/divs whose own trimmed text equals target
+            const cells = Array.from(document.querySelectorAll('td, div, span, p, label'));
+            for (const el of cells) {
+                if (!isVis(el) || el.children.length > 2) continue;
+                const txt = norm(el.innerText);
+                if (txt === target) {
+                    const rect = el.getBoundingClientRect();
+                    // Click on checkbox ~90px to the left of text or center of row
+                    const rowParent = el.closest('tr, [role="row"], div');
+                    const rowRect = rowParent ? rowParent.getBoundingClientRect() : rect;
+                    return { found: true, x: rowRect.left + 26, y: rect.top + rect.height / 2, text: txt };
+                }
+            }
+            return { found: false, seen: seen.slice(0, 20) };
+        }""", target_upper)
+
+        if not click_info or not click_info.get("found"):
+            print(f"    [DEBUG] Visible table rows seen: {click_info.get('seen') if click_info else []}")
+            save_debug(page, debug_dir, f"{report_key}_missing_{fac.replace(' ', '_')}")
+            raise RuntimeError(f"Could not find visible facility '{fac}' in FacilityCode modal for {report_key}")
+
+        page.mouse.click(click_info["x"], click_info["y"])
+        print(f"    [+] Selected facility: {fac} (at x={click_info['x']:.0f}, y={click_info['y']:.0f})")
+        page.wait_for_timeout(450)
 
     # Click blue SELECT button
-    select_btn = scope.locator("button:has-text('SELECT'), button:has-text('Select'), button:has-text('OK')").first
-    select_btn.wait_for(state="visible", timeout=10000)
     select_btn.click()
-    page.wait_for_timeout(1000)
+    page.wait_for_timeout(1200)
 
 
 def download_single_report(page, report, output_dir, debug_dir):
@@ -243,54 +317,56 @@ def download_single_report(page, report, output_dir, debug_dir):
     out_path = os.path.join(output_dir, report["filename"])
     print(f"\n==> Downloading [{menu_text}] -> {report['filename']}")
 
-    # Navigate via sidebar menu click (most reliable in Blazor SPA)
-    menu_link = page.locator(f"a:has-text('{menu_text}'), span:has-text('{menu_text}'), li:has-text('{menu_text}')").first
+    # Navigate via exact sidebar menu click (most reliable in Blazor SPA)
+    menu_link = page.get_by_text(menu_text, exact=True).first
     if menu_link.count() > 0 and menu_link.is_visible():
         menu_link.click()
     else:
-        # Try expanding 'View' sidebar group first
-        view_toggle = page.locator("a:has-text('View'), span:has-text('View')").first
+        view_toggle = page.get_by_text("View", exact=True).first
         if view_toggle.count() > 0 and view_toggle.is_visible():
             view_toggle.click()
-            page.wait_for_timeout(600)
+            page.wait_for_timeout(800)
+        menu_link = page.get_by_text(menu_text, exact=True).first
         if menu_link.count() > 0 and menu_link.is_visible():
             menu_link.click()
         else:
             page.goto(f"{PMS_BASE_URL}{report['url_path']}", wait_until="domcontentloaded", timeout=45000)
             wait_blazor_ready(page)
 
-    page.wait_for_timeout(2000)
+    page.wait_for_timeout(2500)
 
-    # Select LQ MODULE & LQ UTILITY
-    select_lq_facilities(page, debug_dir, key)
+    # Select target facilities for this report (LQ MODULE & LQ UTILITY, or LQ TOPSIDE for FTP)
+    select_lq_facilities(page, debug_dir, key, report.get("facilities"))
 
     # Click Load Data
-    load_btn = page.locator("button:has-text('Load Data'), button:has-text('Load'), button:has-text('Search')").first
+    load_btn = page.locator("button:has-text('Load Data'):visible, button:has-text('Load'):visible, button:has-text('Search'):visible").first
     load_btn.wait_for(state="visible", timeout=15000)
     load_btn.click()
     print("    Loading data from PMS...")
 
     # Wait for loading spinner/overlay to finish
-    page.wait_for_timeout(2500)
+    page.wait_for_timeout(3000)
     for spinner_sel in (".loading", ".spinner", ".progress", ".b-loading", ".mud-progress-linear"):
         try:
             if page.locator(spinner_sel).first.is_visible():
                 page.wait_for_selector(spinner_sel, state="hidden", timeout=90000)
         except Exception:
             pass
-    page.wait_for_timeout(2000)
+    page.wait_for_timeout(2500)
+    save_debug(page, debug_dir, f"{key}_after_load")
 
     # Trigger Excel Export and capture download
     export_selectors = [
-        "button:has-text('Export Excel')",
-        "button:has-text('Excel')",
-        "button:has-text('Export')",
-        "a:has-text('Export Excel')",
-        "a:has-text('Excel')",
-        "button[title*='Excel' i]",
-        "button[title*='Export' i]",
-        "i.fa-file-excel",
-        ".fa-file-excel",
+        "button:has-text('Export data'):visible",
+        "a:has-text('Export data'):visible",
+        "button:has-text('Export Excel'):visible",
+        "button:has-text('Excel'):visible",
+        "button:has-text('Export'):visible",
+        "a:has-text('Export Excel'):visible",
+        "a:has-text('Excel'):visible",
+        "button[title*='Excel' i]:visible",
+        "button[title*='Export' i]:visible",
+        "i.fa-file-excel:visible",
     ]
     export_btn = None
     for sel in export_selectors:
@@ -304,15 +380,21 @@ def download_single_report(page, report, output_dir, debug_dir):
         raise RuntimeError(f"Could not find Export Excel button on {menu_text}")
 
     with page.expect_download(timeout=120000) as dl_info:
-        export_btn.click()
-        # Handle dropdown export menu if Export button opens a sub-menu ('Excel')
-        page.wait_for_timeout(800)
-        sub_excel = page.locator("li:has-text('Excel'), a:has-text('Excel'), button:has-text('Export to Excel')").first
-        try:
-            if sub_excel.count() > 0 and sub_excel.is_visible() and sub_excel != export_btn:
-                sub_excel.click()
-        except Exception:
-            pass
+        export_btn.click(force=True)
+        # Handle Punchlist dropdown menu ('No Image' / 'With Image') or 'Export to Excel'
+        page.wait_for_timeout(900)
+        for sub_text in ("No Image", "Export to Excel", "Excel"):
+            sub_opt = page.get_by_text(sub_text, exact=True)
+            clicked_sub = False
+            for idx in range(sub_opt.count()):
+                el = sub_opt.nth(idx)
+                if el.is_visible():
+                    el.click(force=True)
+                    print(f"    [+] Clicked export submenu option: {sub_text}")
+                    clicked_sub = True
+                    break
+            if clicked_sub:
+                break
 
     download = dl_info.value
     os.makedirs(output_dir, exist_ok=True)
@@ -333,6 +415,14 @@ def run_download(output_dir, headed=False):
     mc_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
     load_local_env(mc_dir)
     debug_dir = os.path.join(os.path.dirname(__file__), 'debug_logs')
+    # Clear old screenshots from previous runs so debug_logs only shows latest run
+    if os.path.isdir(debug_dir):
+        for old_fn in os.listdir(debug_dir):
+            if old_fn.endswith(".png"):
+                try:
+                    os.remove(os.path.join(debug_dir, old_fn))
+                except Exception:
+                    pass
 
     username = os.environ.get("PMS_USERNAME", "").strip()
     password = os.environ.get("PMS_PASSWORD", "").strip()
