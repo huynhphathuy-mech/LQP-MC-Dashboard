@@ -203,21 +203,28 @@ def push_to_github(files, label="Manual PC Sync"):
 
 def setup_windows_task():
     script_path = str(MC_DIR / "scripts" / "github_sync.py")
+    auto_bat = str(MC_DIR / "AUTO_SYNC_PMS_PC.bat")
     py_exe = sys.executable
-    task_name = "LQP_MC_Dashboard_AutoSync_Pull"
-    cmd = [
-        "schtasks", "/Create", "/F",
-        "/TN", task_name,
-        "/SC", "HOURLY", "/MO", "3",
-        "/TR", f'"{py_exe}" "{script_path}" pull'
+
+    tasks = [
+        ("LQP_MC_Dashboard_Pull_3h", ["schtasks", "/Create", "/F", "/TN", "LQP_MC_Dashboard_Pull_3h", "/SC", "HOURLY", "/MO", "3", "/TR", f'"{py_exe}" "{script_path}" pull']),
+        ("LQP_MC_Dashboard_PMS_0805", ["schtasks", "/Create", "/F", "/TN", "LQP_MC_Dashboard_PMS_0805", "/SC", "DAILY", "/ST", "08:05", "/TR", f'"{auto_bat}" --silent']),
+        ("LQP_MC_Dashboard_PMS_1305", ["schtasks", "/Create", "/F", "/TN", "LQP_MC_Dashboard_PMS_1305", "/SC", "DAILY", "/ST", "13:05", "/TR", f'"{auto_bat}" --silent']),
+        ("LQP_MC_Dashboard_PMS_1730", ["schtasks", "/Create", "/F", "/TN", "LQP_MC_Dashboard_PMS_1730", "/SC", "DAILY", "/ST", "17:30", "/TR", f'"{auto_bat}" --silent']),
     ]
-    print(f"==> Creating Windows Task Scheduler job '{task_name}' (every 3 hours)...")
-    res = subprocess.run(cmd, capture_output=True, text=True)
-    if res.returncode == 0:
-        print("[SUCCESS] Scheduled task created! Your PC will auto-pull latest GitHub data every 3 hours.")
-    else:
-        print(f"[WARN] Could not create scheduled task: {res.stderr.strip() or res.stdout.strip()}")
-        print("       You can also run SYNC_FROM_GITHUB.bat anytime with 1 click.")
+    print("==> Setting up Windows Task Scheduler auto-sync jobs (Vietnam IP)...")
+    ok = 0
+    for name, cmd in tasks:
+        res = subprocess.run(cmd, capture_output=True, text=True)
+        if res.returncode == 0:
+            print(f"  [OK] Created task: {name}")
+            ok += 1
+        else:
+            print(f"  [WARN] Could not create {name}: {res.stderr.strip() or res.stdout.strip()}")
+    if ok == len(tasks):
+        print("\n[SUCCESS] All scheduled tasks created!")
+        print("  - Auto-sync PTSC PMS -> GitHub Pages at 08:05, 13:05, 17:30 daily (when PC is on)")
+        print("  - Auto-pull latest GitHub updates to PC every 3 hours")
 
 
 def main():
