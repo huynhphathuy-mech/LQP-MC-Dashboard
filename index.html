@@ -213,6 +213,32 @@
 
                         <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
 
+                            <!-- Scope Filter dropdown -->
+                            <div style="display: flex; align-items: center; gap: 0.3rem;">
+                                <label for="punch-filter-scope" style="font-size: 0.78rem; font-weight: 600; color: #475569;">Scope:</label>
+                                <select id="punch-filter-scope" style="background: #fff; border: 1px solid #cbd5e1; color: #0f172a; padding: 0.35rem 0.55rem; border-radius: 6px; font-size: 0.8rem; font-weight: 600; outline: none; cursor: pointer;">
+                                    <option value="ALL">All LQ</option>
+                                    <option value="CLQM">CLQM</option>
+                                    <option value="CLQU">CLQU</option>
+                                </select>
+                            </div>
+
+                            <!-- System Filter dropdown -->
+                            <div style="display: flex; align-items: center; gap: 0.3rem;">
+                                <label for="punch-filter-sys" style="font-size: 0.78rem; font-weight: 600; color: #475569;">System:</label>
+                                <select id="punch-filter-sys" style="background: #fff; border: 1px solid #cbd5e1; color: #0f172a; padding: 0.35rem 0.55rem; border-radius: 6px; font-size: 0.8rem; font-weight: 600; outline: none; cursor: pointer; min-width: 120px;">
+                                    <option value="ALL">All Systems</option>
+                                </select>
+                            </div>
+
+                            <!-- SubSystem Filter dropdown -->
+                            <div style="display: flex; align-items: center; gap: 0.3rem;">
+                                <label for="punch-filter-subsys" style="font-size: 0.78rem; font-weight: 600; color: #475569;">SubSystem:</label>
+                                <select id="punch-filter-subsys" style="background: #fff; border: 1px solid #cbd5e1; color: #0f172a; padding: 0.35rem 0.55rem; border-radius: 6px; font-size: 0.8rem; font-weight: 600; outline: none; cursor: pointer; min-width: 135px;">
+                                    <option value="ALL">All SubSystems</option>
+                                </select>
+                            </div>
+
                             <!-- Phase Filter dropdown -->
 
                             <div style="display: flex; align-items: center; gap: 0.35rem;">
@@ -3368,8 +3394,8 @@
 
     <script src="data.js"></script>
     <script src="manual_data.js"></script>
-    <script src="app.js?v=2.4"></script>
-    <script src="enhancements.js?v=2.4"></script>
+    <script src="app.js?v=2.5"></script>
+    <script src="enhancements.js?v=2.5"></script>
 
 </body>
 
