@@ -1,27 +1,27 @@
 {
   "updateDate": "2026-11-24",
-  "updatedAt": "2026-11-24 08:27:21 (VN)",
-  "syncSource": "Local PC Build (23-Nov-2026 PMS Exports)",
+  "updatedAt": "2026-11-24 10:43:28 (VN)",
+  "syncSource": "Auto-Sync PTSC PMS",
   "summary": {
     "itrA": {
-      "done": 1908,
-      "total": 15345
+      "done": 1980,
+      "total": 15344
     },
     "itrB": {
-      "done": 0,
+      "done": 6,
       "total": 4291
     },
     "punchA": {
-      "done": 135,
+      "done": 139,
       "total": 212
     },
     "punchB": {
       "done": 620,
-      "total": 1214
+      "total": 1240
     },
     "punchC": {
       "done": 555,
-      "total": 843
+      "total": 853
     },
     "dac": {
       "done": 20,
