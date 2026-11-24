@@ -1,29 +1,6 @@
 {
-  "updatedAt": "2026-11-24 10:55:52 (VN)",
+  "updatedAt": "2026-11-24 08:27:15",
   "siteWalkdownPunches": [
-    {
-      "id": "SW-1795492418468",
-      "tagNo": "CLQU-T-5802",
-      "equipName": "Washdown Water Storage Tank",
-      "cmsPunchTag": "CLQU-T-5802",
-      "punchNo": "SW-002",
-      "tagDesc": "WASH DOWN WATER STORAGE TANK",
-      "sys": "CLQU-58",
-      "subsys": "CLQU-58-07",
-      "pkgName": "PQ-CPC0-ICS026-Pressure Gauge, Diff Pressure Gauge and Temperature Gauge",
-      "disc": "MECHANICAL",
-      "phase": "LQ-CON",
-      "cat": "B",
-      "status": "OPEN",
-      "cmsStatus": "PENDING_CMS",
-      "officialCmsPunchNo": "",
-      "desc": "Ladder should be fixed",
-      "actionBy": "VSP",
-      "openDate": "2026-11-24",
-      "closeDate": "",
-      "expDate": "",
-      "createdAt": "2026-11-24T03:53:38.468Z"
-    },
     {
       "id": "SW-1793789882413",
       "tagNo": "CLQU-V-5001",
@@ -92,7 +69,44 @@
       "respType": "red"
     }
   ],
-  "manualItrA": [],
+  "manualItrA": [
+    {
+      "sys": "51",
+      "subsys": "CLQU-51-04",
+      "subsysDesc": "Utility Air Receiver & Distribution",
+      "disc": "MECHANICAL",
+      "formNo": "M28-A",
+      "tag": "CLQU-SPTR-4551",
+      "tagDesc": "Liquid Drain Trap",
+      "dateStr": "2026-11-06",
+      "compDate": "2026-11-06",
+      "isManual": true
+    },
+    {
+      "sys": "51",
+      "subsys": "CLQU-51-04",
+      "subsysDesc": "Utility Air Receiver & Distribution",
+      "disc": "MECHANICAL",
+      "formNo": "M28-A",
+      "tag": "CLQU-SPKY-5151",
+      "tagDesc": "Valve Interlock",
+      "dateStr": "2026-11-06",
+      "compDate": "2026-11-06",
+      "isManual": true
+    },
+    {
+      "sys": "51",
+      "subsys": "CLQU-51-04",
+      "subsysDesc": "Utility Air Receiver & Distribution",
+      "disc": "MECHANICAL",
+      "formNo": "M28-A",
+      "tag": "CLQU-SPKY-5152",
+      "tagDesc": "Valve Interlock",
+      "dateStr": "2026-11-06",
+      "compDate": "2026-11-06",
+      "isManual": true
+    }
+  ],
   "manualItrB": [],
   "manualFtp": {},
   "subsysSkylineDates": {
