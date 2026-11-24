@@ -702,12 +702,10 @@
 
     function drillToPunch(prefix, cat) {
         if (typeof openPunchModal === "function") {
-            openPunchModal("ALL", cat || "ALL");
-            const searchInput = document.getElementById("punch-search-input");
-            if (searchInput && prefix && prefix !== "ALL") {
-                searchInput.value = prefix;
-                searchInput.dispatchEvent(new Event("input", { bubbles: true }));
-            }
+            const sysArg = (currentExecSys && currentExecSys !== "ALL" && (!prefix || prefix === "ALL" || currentExecSys.toUpperCase().startsWith(prefix)))
+                ? currentExecSys
+                : "ALL";
+            openPunchModal("ALL", cat || "ALL", prefix || "ALL", sysArg);
         }
     }
 
