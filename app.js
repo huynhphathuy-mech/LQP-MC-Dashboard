@@ -1395,7 +1395,7 @@ function renderDashboardWidgets(mcData, dashGroups) {
                         <div class="progress-bar"><div class="progress-fill fill-blue" style="width:${getPct(dataObj.itrA.done, dataObj.itrA.total)}%"></div></div>
                     </div>
                     
-                    <div class="mc-item mc-item-link" onclick="openPunchModal('ALL', 'A')" title="Click to inspect Punch Cat A Register">
+                    <div class="mc-item mc-item-link" onclick="openPunchModal('ALL', 'A', '${scopeArg}', '${sysArg}')" title="Click to inspect Punch Cat A Register">
                         <div class="mc-info">
                             <span class="mc-label">Punch A Closed</span>
                             <span class="mc-value">${dataObj.punchA.done.toLocaleString()} / ${dataObj.punchA.total.toLocaleString()} <span class="pct pct-red">${getPct(dataObj.punchA.done, dataObj.punchA.total)}%</span></span>
@@ -1403,7 +1403,7 @@ function renderDashboardWidgets(mcData, dashGroups) {
                         <div class="progress-bar"><div class="progress-fill fill-red" style="width:${getPct(dataObj.punchA.done, dataObj.punchA.total)}%"></div></div>
                     </div>
                     
-                    <div class="mc-item mc-item-link" onclick="openPunchModal('ALL', 'B')" title="Click to inspect Punch Cat B Register">
+                    <div class="mc-item mc-item-link" onclick="openPunchModal('ALL', 'B', '${scopeArg}', '${sysArg}')" title="Click to inspect Punch Cat B Register">
                         <div class="mc-info">
                             <span class="mc-label">Punch B Closed</span>
                             <span class="mc-value">${dataObj.punchB.done.toLocaleString()} / ${dataObj.punchB.total.toLocaleString()} <span class="pct pct-yellow">${getPct(dataObj.punchB.done, dataObj.punchB.total)}%</span></span>
@@ -2203,11 +2203,63 @@ function formatDateStr(val) {
 // ==========================================
 let currentPunchPhase = 'ALL';
 let currentPunchCat = 'ALL';
+let currentPunchScope = 'ALL';
+let currentPunchSys = 'ALL';
+let currentPunchSubsys = 'ALL';
 let currentPunchList = [];
 let currentPunchDiscFilter = 'ALL';
 let currentPunchStatusFilter = 'ALL'; // 'ALL' | 'OPEN' | 'CLOSED'
 let currentPunchSearch = '';
 let currentPunchPkgSearch = '';
+
+function getPunchBaseForDropdowns() {
+    const gd = window.GLOBAL_MC_DATA;
+    let punches = (gd && gd.globalPunchList) ? gd.globalPunchList : [];
+    if (currentPunchPhase !== 'ALL') {
+        punches = punches.filter(p => p.phase === currentPunchPhase);
+    }
+    if (currentPunchCat !== 'ALL') {
+        punches = punches.filter(p => p.cat && p.cat.includes(currentPunchCat));
+    }
+    if (currentPunchScope !== 'ALL') {
+        punches = punches.filter(p => {
+            const key = String(p.subsys || p.sys || '').trim().toUpperCase();
+            return key.startsWith(currentPunchScope);
+        });
+    }
+    return punches;
+}
+
+function populatePunchSysDropdowns() {
+    const base = getPunchBaseForDropdowns();
+    const sysSel = document.getElementById('punch-filter-sys');
+    if (sysSel) {
+        const systems = Array.from(new Set(base.map(p => String(p.sys || '').trim()).filter(Boolean))).sort();
+        if (currentPunchSys !== 'ALL' && !systems.includes(currentPunchSys)) {
+            currentPunchSys = 'ALL';
+            currentPunchSubsys = 'ALL';
+        }
+        sysSel.innerHTML = `<option value="ALL">All Systems (${systems.length})</option>` +
+            systems.map(s => `<option value="${s}" ${currentPunchSys === s ? 'selected' : ''}>${s}</option>`).join('');
+    }
+    populatePunchSubsysDropdown();
+}
+
+function populatePunchSubsysDropdown() {
+    let base = getPunchBaseForDropdowns();
+    if (currentPunchSys !== 'ALL') {
+        base = base.filter(p => String(p.sys || '').trim() === currentPunchSys);
+    }
+    const subSel = document.getElementById('punch-filter-subsys');
+    if (subSel) {
+        const subs = Array.from(new Set(base.map(p => String(p.subsys || '').trim()).filter(Boolean))).sort();
+        if (currentPunchSubsys !== 'ALL' && !subs.includes(currentPunchSubsys)) {
+            currentPunchSubsys = 'ALL';
+        }
+        subSel.innerHTML = `<option value="ALL">All SubSystems (${subs.length})</option>` +
+            subs.map(s => `<option value="${s}" ${currentPunchSubsys === s ? 'selected' : ''}>${s}</option>`).join('');
+    }
+}
 
 function populatePunchPhaseDropdown() {
     const sel = document.getElementById('punch-filter-phase');
@@ -2238,22 +2290,27 @@ function populatePunchPhaseDropdown() {
     }
 }
 
-function openPunchModal(phase, catType) {
+function openPunchModal(phase, catType, scope, sys) {
     const gd = window.GLOBAL_MC_DATA;
     if (!gd) return;
     
     currentPunchPhase = phase || 'ALL';
     currentPunchCat = catType || 'ALL';
+    currentPunchScope = scope || 'ALL';
+    currentPunchSys = sys || 'ALL';
+    currentPunchSubsys = 'ALL';
     currentPunchDiscFilter = 'ALL';
     currentPunchStatusFilter = 'ALL';
     currentPunchSearch = '';
 
-    // Populate and sync phase & cat dropdowns
+    // Populate and sync phase, cat & scope dropdowns
     populatePunchPhaseDropdown();
     const phaseSelect = document.getElementById('punch-filter-phase');
     if (phaseSelect) phaseSelect.value = currentPunchPhase;
     const catSelect = document.getElementById('punch-filter-cat');
     if (catSelect) catSelect.value = currentPunchCat;
+    const scopeSelect = document.getElementById('punch-filter-scope');
+    if (scopeSelect) scopeSelect.value = currentPunchScope;
 
     currentPunchPkgSearch = '';
 
@@ -2268,6 +2325,7 @@ function openPunchModal(phase, catType) {
 
     document.getElementById('punch-modal').style.display = 'flex';
 
+    populatePunchSysDropdowns();
     refreshPunchModalData();
 }
 window.openPunchModal = openPunchModal;
@@ -2276,12 +2334,12 @@ function refreshPunchModalData() {
     const gd = window.GLOBAL_MC_DATA;
     if (!gd) return;
 
-    let punches = gd.globalPunchList || [];
-    if (currentPunchPhase !== 'ALL') {
-        punches = punches.filter(p => p.phase === currentPunchPhase);
+    let punches = getPunchBaseForDropdowns();
+    if (currentPunchSys !== 'ALL') {
+        punches = punches.filter(p => String(p.sys || '').trim() === currentPunchSys);
     }
-    if (currentPunchCat !== 'ALL') {
-        punches = punches.filter(p => p.cat && p.cat.includes(currentPunchCat));
+    if (currentPunchSubsys !== 'ALL') {
+        punches = punches.filter(p => String(p.subsys || '').trim() === currentPunchSubsys);
     }
     currentPunchList = punches;
 
@@ -2449,9 +2507,13 @@ function renderPunchModalTable() {
         let label = (currentPunchPhase === 'ALL' && currentPunchCat === 'ALL')
             ? 'All Punches (Master Register)'
             : `Punch ${currentPunchPhase}_${currentPunchCat}`;
+        let scopeText = currentPunchScope === 'ALL' ? '' : ` • Scope: ${currentPunchScope}`;
+        let sysText = currentPunchSubsys !== 'ALL'
+            ? ` • SubSystem: ${currentPunchSubsys}`
+            : (currentPunchSys !== 'ALL' ? ` • System: ${currentPunchSys}` : '');
         let statusText = currentPunchStatusFilter === 'ALL' ? '' : ` • Status: ${currentPunchStatusFilter}`;
         let discText = currentPunchDiscFilter === 'ALL' ? '' : ` • Discipline: ${currentPunchDiscFilter}`;
-        tableTitle.innerText = `${label} (${filtered.length} items shown${statusText}${discText})`;
+        tableTitle.innerText = `${label} (${filtered.length} items shown${scopeText}${sysText}${statusText}${discText})`;
     }
 
     const subTitle = document.querySelector('#punch-modal-title span');
@@ -2558,9 +2620,11 @@ async function exportPunchToExcel() {
     } else {
         baseName = `Punch_${currentPunchPhase}_${currentPunchCat}`;
     }
+    const scopePart = currentPunchScope !== 'ALL' ? `_${currentPunchScope}` : '';
+    const sysPart = currentPunchSubsys !== 'ALL' ? `_${currentPunchSubsys}` : (currentPunchSys !== 'ALL' ? `_${currentPunchSys}` : '');
     const discPart = currentPunchDiscFilter !== 'ALL' ? `_${currentPunchDiscFilter}` : '';
     const statusPart = currentPunchStatusFilter !== 'ALL' ? `_${currentPunchStatusFilter}` : '';
-    const safeFileName = `${baseName}${discPart}${statusPart}.xlsx`.replace(/[^a-zA-Z0-9_.-]/g, '_');
+    const safeFileName = `${baseName}${scopePart}${sysPart}${discPart}${statusPart}.xlsx`.replace(/[^a-zA-Z0-9_.-]/g, '_');
 
     // If ExcelJS is not available, fallback to basic SheetJS
     if (typeof ExcelJS === 'undefined') {
@@ -2746,13 +2810,46 @@ function setupPunchModalEvents() {
     const searchInput = document.getElementById('punch-search-input');
     const pkgSearchInput = document.getElementById('punch-pkg-search-input');
     const exportBtn = document.getElementById('btn-export-punch-excel');
+    const scopeSelect = document.getElementById('punch-filter-scope');
+    const sysSelect = document.getElementById('punch-filter-sys');
+    const subsysSelect = document.getElementById('punch-filter-subsys');
     const phaseSelect = document.getElementById('punch-filter-phase');
     const catSelect = document.getElementById('punch-filter-cat');
+
+    if (scopeSelect) {
+        scopeSelect.addEventListener('change', (e) => {
+            currentPunchScope = e.target.value;
+            currentPunchSys = 'ALL';
+            currentPunchSubsys = 'ALL';
+            currentPunchDiscFilter = 'ALL';
+            populatePunchSysDropdowns();
+            refreshPunchModalData();
+        });
+    }
+
+    if (sysSelect) {
+        sysSelect.addEventListener('change', (e) => {
+            currentPunchSys = e.target.value;
+            currentPunchSubsys = 'ALL';
+            currentPunchDiscFilter = 'ALL';
+            populatePunchSubsysDropdown();
+            refreshPunchModalData();
+        });
+    }
+
+    if (subsysSelect) {
+        subsysSelect.addEventListener('change', (e) => {
+            currentPunchSubsys = e.target.value;
+            currentPunchDiscFilter = 'ALL';
+            refreshPunchModalData();
+        });
+    }
 
     if (phaseSelect) {
         phaseSelect.addEventListener('change', (e) => {
             currentPunchPhase = e.target.value;
             currentPunchDiscFilter = 'ALL';
+            populatePunchSysDropdowns();
             refreshPunchModalData();
         });
     }
@@ -2761,6 +2858,7 @@ function setupPunchModalEvents() {
         catSelect.addEventListener('change', (e) => {
             currentPunchCat = e.target.value;
             currentPunchDiscFilter = 'ALL';
+            populatePunchSysDropdowns();
             refreshPunchModalData();
         });
     }
