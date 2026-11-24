@@ -1,0 +1,43 @@
+{
+  "updateDate": "2026-11-24",
+  "updatedAt": "2026-11-24 08:27:21 (VN)",
+  "syncSource": "Local PC Build (23-Nov-2026 PMS Exports)",
+  "summary": {
+    "itrA": {
+      "done": 1908,
+      "total": 15345
+    },
+    "itrB": {
+      "done": 0,
+      "total": 4291
+    },
+    "punchA": {
+      "done": 135,
+      "total": 212
+    },
+    "punchB": {
+      "done": 620,
+      "total": 1214
+    },
+    "punchC": {
+      "done": 555,
+      "total": 843
+    },
+    "dac": {
+      "done": 20,
+      "total": 804
+    },
+    "cssc": {
+      "done": 2,
+      "total": 289
+    },
+    "rfc": {
+      "done": 0,
+      "total": 289
+    },
+    "ftp": {
+      "done": 0,
+      "total": 190
+    }
+  }
+}
