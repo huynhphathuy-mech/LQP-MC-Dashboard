@@ -721,6 +721,8 @@
         }
     }
 
+    window.getActiveExecScope = () => currentScope;
+    window.getActiveExecSys = () => currentExecSys;
     window.execSetScope = function (scope) {
         currentScope = scope;
         currentExecSys = "ALL";
@@ -873,15 +875,15 @@
                 </div>
 
                 <div class="cert-strip">
-                    <div class="cert-pill-card" onclick="execDrillMatrix('${currentScope}','mc')">
-                        <div><div class="cert-pill-lbl">CC-DAC CERTIFICATES</div><div class="cert-pill-sub">Discipline Acceptance</div></div>
+                    <div class="cert-pill-card" onclick="openCertModal('DAC','ALL','${currentScope}','${currentExecSys}')" title="Click to open DAC Certificate Register">
+                        <div><div class="cert-pill-lbl">CC-DAC / PC-DAC CERTIFICATES</div><div class="cert-pill-sub">Discipline Acceptance (Click for Register)</div></div>
                         <div class="cert-pill-val" style="color:#a855f7;">${activeM.dac.done} / ${activeM.dac.total} <small>(${pctStr(activeM.dac.done, activeM.dac.total)}%)</small></div>
                     </div>
-                    <div class="cert-pill-card" onclick="execDrillMatrix('${currentScope}','mc')">
+                    <div class="cert-pill-card" onclick="openCertModal('CSSC','ALL','${currentScope}','${currentExecSys}')" title="Click to open CSSC Certificate Register">
                         <div><div class="cert-pill-lbl">CSSC CERTIFICATES</div><div class="cert-pill-sub">Subsystem Mechanical Completion</div></div>
                         <div class="cert-pill-val" style="color:#10b981;">${activeM.cssc.done} / ${activeM.cssc.total} <small>(${pctStr(activeM.cssc.done, activeM.cssc.total)}%)</small></div>
                     </div>
-                    <div class="cert-pill-card" onclick="execDrillMatrix('${currentScope}','precom')">
+                    <div class="cert-pill-card" onclick="openCertModal('RFC','ALL','${currentScope}','${currentExecSys}')" title="Click to open RFC Certificate Register">
                         <div><div class="cert-pill-lbl">RFC CERTIFICATES</div><div class="cert-pill-sub">Ready for Commissioning</div></div>
                         <div class="cert-pill-val" style="color:#38bdf8;">${activeM.rfc.done} / ${activeM.rfc.total} <small>(${pctStr(activeM.rfc.done, activeM.rfc.total)}%)</small></div>
                     </div>
@@ -893,7 +895,7 @@
 
                 <div class="exec-section-divider">
                     <span>Discipline Breakdown — Scope: ${scopeLabel}${currentExecSys !== 'ALL' ? ' • ' + currentExecSys : ''}</span>
-                    <span>Click any progress bar to open MC Matrix</span>
+                    <span>Click any row to inspect ITR-A / Punch / DAC / CSSC details</span>
                 </div>
             </div>
         `;
