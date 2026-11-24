@@ -1,7 +1,7 @@
 {
-  "updateDate": "2026-11-24",
-  "updatedAt": "2026-11-24 13:32:36 (VN)",
-  "syncSource": "Auto-Sync PTSC PMS",
+  "updateDate": "2026-11-25",
+  "updatedAt": "2026-11-25 00:30:37 (VN)",
+  "syncSource": "Daily Auto-Sync (GitHub Actions)",
   "summary": {
     "itrA": {
       "done": 1980,
@@ -12,11 +12,11 @@
       "total": 4291
     },
     "punchA": {
-      "done": 139,
+      "done": 141,
       "total": 212
     },
     "punchB": {
-      "done": 620,
+      "done": 624,
       "total": 1240
     },
     "punchC": {
@@ -24,7 +24,7 @@
       "total": 853
     },
     "dac": {
-      "done": 20,
+      "done": 22,
       "total": 804
     },
     "cssc": {
