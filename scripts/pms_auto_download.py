@@ -127,19 +127,41 @@ def login_pms(page, username, password, debug_dir):
     else:
         pw_input.press("Enter")
 
-    # Wait until login completes and sidebar / dashboard loads
+    # Wait for either "Select project and facility" (NEXT >) screen OR main portal
+    page.wait_for_timeout(3000)
     try:
-        page.wait_for_selector("text=Checksheet Overview", timeout=45000)
+        page.wait_for_selector("button:has-text('NEXT'), button:has-text('Next'), text=Select project and facility, text=Checksheet Overview, text=View", timeout=45000)
     except Exception:
-        # Maybe needs to expand 'View' menu first
-        view_menu = page.locator("text=View").first
+        save_debug(page, debug_dir, "02_after_login_timeout")
+        raise RuntimeError("Login to PTSC PMS timed out before reaching project selector or portal.")
+
+    # Step 2 of Login: Handle "Select project and facility" -> click blue "NEXT >" button
+    next_btn = page.locator("button:has-text('NEXT'), button:has-text('Next')").first
+    if next_btn.count() > 0 and next_btn.is_visible():
+        print("-> 'Select project and facility' screen detected (ProjectCode=BB). Clicking 'NEXT >'...")
+        next_btn.click()
+        wait_blazor_ready(page)
+        page.wait_for_timeout(2500)
+
+    # Wait for sidebar 'View' or 'Checksheet Overview'
+    try:
+        page.wait_for_selector("text=View, text=Checksheet Overview, text=Dashboard", timeout=45000)
+    except Exception:
+        save_debug(page, debug_dir, "03_after_next_failed")
+        raise RuntimeError("Clicked NEXT > but main portal did not load.")
+
+    # Expand 'View' sidebar menu if 'Checksheet Overview' is not yet visible
+    if page.locator("text=Checksheet Overview").count() == 0 or not page.locator("text=Checksheet Overview").first.is_visible():
+        view_menu = page.locator("a:has-text('View'), span:has-text('View'), li:has-text('View')").first
         if view_menu.count() > 0 and view_menu.is_visible():
+            print("-> Expanding sidebar 'View' menu...")
             view_menu.click()
-            page.wait_for_timeout(1000)
-        if page.locator("text=Checksheet Overview").count() == 0:
-            save_debug(page, debug_dir, "02_login_failed")
-            raise RuntimeError("Login to PTSC PMS did not reach main portal. Check credentials or screenshot in scripts/debug_logs.")
-    print("-> Logged in to PTSC PMS successfully!")
+            page.wait_for_timeout(1200)
+
+    if page.locator("text=Checksheet Overview").count() == 0:
+        save_debug(page, debug_dir, "04_no_checksheet_menu")
+        raise RuntimeError("Logged in to PTSC PMS, but 'Checksheet Overview' menu not found.")
+    print("-> Logged in to PTSC PMS and reached main portal successfully!")
 
 
 def select_lq_facilities(page, debug_dir, report_key):
@@ -173,34 +195,46 @@ def select_lq_facilities(page, debug_dir, report_key):
     page.wait_for_timeout(1200)
 
     # Wait for FacilityCode popup modal
-    modal_search = page.locator("div.modal input[type='text'], div[role='dialog'] input[type='text'], input[placeholder*='Search' i]").first
-    for fac in TARGET_FACILITIES:
-        # Search for facility if search box exists inside modal
-        if modal_search.count() > 0 and modal_search.is_visible():
-            modal_search.fill("")
-            page.wait_for_timeout(200)
-            modal_search.fill(fac)
-            page.wait_for_timeout(600)
+    modal = page.locator("div.modal:visible, div[role='dialog']:visible, .mud-dialog:visible, .b-modal:visible").last
+    scope = modal if modal.count() > 0 else page
 
-        # Find row matching exact facility name and click its checkbox
-        row = page.locator("tr, div[role='row'], li").filter(has_text=fac).first
-        if row.count() == 0:
+    for fac in TARGET_FACILITIES:
+        # Exact text match for facility cell (avoid matching 'LQ MODULE TEMP SUPPORT' or 'LQ JACKET')
+        exact_cell = scope.get_by_text(fac, exact=True).first
+        if exact_cell.count() == 0 or not exact_cell.is_visible():
+            # Try typing into modal search box if not immediately visible
+            modal_search = scope.locator("input[type='text'], input[type='search']").first
+            if modal_search.count() > 0 and modal_search.is_visible():
+                modal_search.fill("")
+                page.wait_for_timeout(200)
+                modal_search.fill(fac)
+                page.wait_for_timeout(700)
+            exact_cell = scope.get_by_text(fac, exact=True).first
+
+        if exact_cell.count() == 0:
             save_debug(page, debug_dir, f"{report_key}_missing_{fac.replace(' ', '_')}")
             raise RuntimeError(f"Could not find facility '{fac}' in FacilityCode modal for {report_key}")
 
-        cb = row.locator("input[type='checkbox']").first
-        if cb.count() > 0:
-            if not cb.is_checked():
-                cb.check(force=True)
-        else:
-            row.click()
-        page.wait_for_timeout(300)
+        row = exact_cell.locator("xpath=ancestor::tr[1]")
+        if row.count() == 0:
+            row = exact_cell.locator("xpath=ancestor::div[@role='row'][1]")
 
-    # Clear search just in case, then click SELECT
-    select_btn = page.locator("button:has-text('SELECT'), button:has-text('Select'), button:has-text('OK')").first
+        cb = row.locator("input[type='checkbox']").first if row.count() > 0 else exact_cell
+        if cb.count() > 0 and cb != exact_cell:
+            try:
+                if not cb.is_checked():
+                    cb.check(force=True)
+            except Exception:
+                cb.click(force=True)
+        else:
+            exact_cell.click()
+        page.wait_for_timeout(350)
+
+    # Click blue SELECT button
+    select_btn = scope.locator("button:has-text('SELECT'), button:has-text('Select'), button:has-text('OK')").first
     select_btn.wait_for(state="visible", timeout=10000)
     select_btn.click()
-    page.wait_for_timeout(800)
+    page.wait_for_timeout(1000)
 
 
 def download_single_report(page, report, output_dir, debug_dir):
