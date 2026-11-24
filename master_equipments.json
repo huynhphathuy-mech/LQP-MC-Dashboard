@@ -1,0 +1,352 @@
+[
+    {
+        "no": 1,
+        "masterTag": "CLQU-T-5801A",
+        "equipName": "Potable Water Storage Tank",
+        "deckArea": "Sub-Cellar Deck",
+        "module": "CLQU"
+    },
+    {
+        "no": 2,
+        "masterTag": "CLQU-T-5801B",
+        "equipName": "Potable Water Storage Tank",
+        "deckArea": "Sub-Cellar Deck",
+        "module": "CLQU"
+    },
+    {
+        "no": 3,
+        "masterTag": "CLQU-T-5802",
+        "equipName": "Washdown Water Storage Tank",
+        "deckArea": "Sub-Cellar Deck",
+        "module": "CLQU"
+    },
+    {
+        "no": 4,
+        "masterTag": "CLQU-PK-5803",
+        "equipName": "UV Package",
+        "deckArea": "Sub-Cellar Deck",
+        "module": "CLQU"
+    },
+    {
+        "no": 5,
+        "masterTag": "CLQU-T-4501",
+        "equipName": "Utility Open Drain Tank",
+        "deckArea": "Sub-Cellar Deck",
+        "module": "CLQU"
+    },
+    {
+        "no": 6,
+        "masterTag": "CLQU-PK-5501",
+        "equipName": "Sewage Treatment Unit 1",
+        "deckArea": "Sub-Cellar Deck",
+        "module": "CLQU"
+    },
+    {
+        "no": 7,
+        "masterTag": "CLQU-T-5501-05",
+        "equipName": "DECLORINATION_TANK-1",
+        "deckArea": "Sub-Cellar Deck",
+        "module": "CLQU"
+    },
+    {
+        "no": 8,
+        "masterTag": "CLQU-PK-5502",
+        "equipName": "Sewage Treatment Unit 2",
+        "deckArea": "Sub-Cellar Deck",
+        "module": "CLQU"
+    },
+    {
+        "no": 9,
+        "masterTag": "CLQU-T-5502-05",
+        "equipName": "DECLORINATION TANK-2",
+        "deckArea": "Sub-Cellar Deck",
+        "module": "CLQU"
+    },
+    {
+        "no": 10,
+        "masterTag": "CLQU-T-5501-06",
+        "equipName": "Sewage Collection Tank",
+        "deckArea": "Sub-Cellar Deck",
+        "module": "CLQU"
+    },
+    {
+        "no": 11,
+        "masterTag": "CLQU-P-5501A",
+        "equipName": "Sewage Transfer Pump A",
+        "deckArea": "Sub-Cellar Deck",
+        "module": "CLQU"
+    },
+    {
+        "no": 12,
+        "masterTag": "CLQU-P-5501B",
+        "equipName": "Sewage Transfer Pump B",
+        "deckArea": "Sub-Cellar Deck",
+        "module": "CLQU"
+    },
+    {
+        "no": 13,
+        "masterTag": "CLQU-P-4701",
+        "equipName": "Hydrocarbon Sump Pump",
+        "deckArea": "Sub-Cellar Deck",
+        "module": "CLQU"
+    },
+    {
+        "no": 14,
+        "masterTag": "CLQU-P-5803A",
+        "equipName": "Potable  Water  Pump 1",
+        "deckArea": "Sub-Cellar Deck",
+        "module": "CLQU"
+    },
+    {
+        "no": 15,
+        "masterTag": "CLQU-P-5803B",
+        "equipName": "Potable  Water  Pump 2",
+        "deckArea": "Sub-Cellar Deck",
+        "module": "CLQU"
+    },
+    {
+        "no": 16,
+        "masterTag": "CLQU-P-4702",
+        "equipName": "Portable Hydrocarbon Pump",
+        "deckArea": "Sub-Cellar Deck",
+        "module": "CLQU"
+    },
+    {
+        "no": 17,
+        "masterTag": "CLQU-P-5804",
+        "equipName": "Washdown Water Booster Pump",
+        "deckArea": "Sub-Cellar Deck",
+        "module": "CLQU"
+    },
+    {
+        "no": 18,
+        "masterTag": "CLQU-PK-8001",
+        "equipName": "Diesel Firewater Pump Package",
+        "deckArea": "Cellar Deck",
+        "module": "CLQU"
+    },
+    {
+        "no": 19,
+        "masterTag": "CLQU-PK-8002",
+        "equipName": "Starting Air Receiver Package",
+        "deckArea": "Cellar Deck",
+        "module": "CLQU"
+    },
+    {
+        "no": 20,
+        "masterTag": "CLQU-PK-5101",
+        "equipName": "Utility Air Compressor Package",
+        "deckArea": "Cellar Deck",
+        "module": "CLQU"
+    },
+    {
+        "no": 21,
+        "masterTag": "CLQU-V-5102",
+        "equipName": "Utility Air Receiver",
+        "deckArea": "Cellar Deck",
+        "module": "CLQU"
+    },
+    {
+        "no": 22,
+        "masterTag": "CLQU-PK-5001",
+        "equipName": "Instrument Air Dryer Package",
+        "deckArea": "Cellar Deck",
+        "module": "CLQU"
+    },
+    {
+        "no": 23,
+        "masterTag": "CLQU-V-5001",
+        "equipName": "Instrument Air Receiver",
+        "deckArea": "Cellar Deck",
+        "module": "CLQU"
+    },
+    {
+        "no": 24,
+        "masterTag": "CLQU-PK-6101",
+        "equipName": "Emergency Diesel Generator Package (Incl.Water Mist System)",
+        "deckArea": "Cellar Deck",
+        "module": "CLQU"
+    },
+    {
+        "no": 25,
+        "masterTag": "CLQU-PTR-6501",
+        "equipName": "Transformer",
+        "deckArea": "Cellar Deck",
+        "module": "CLQU"
+    },
+    {
+        "no": 26,
+        "masterTag": "CLQU-PTR-6502",
+        "equipName": "Transformer",
+        "deckArea": "Cellar Deck",
+        "module": "CLQU"
+    },
+    {
+        "no": 27,
+        "masterTag": "CLQU-P-5701A",
+        "equipName": "Service Water Pump (Filter)",
+        "deckArea": "Cellar Deck",
+        "module": "CLQU"
+    },
+    {
+        "no": 28,
+        "masterTag": "CLQU-P-5701B",
+        "equipName": "Service Water Pump (Filter)",
+        "deckArea": "Cellar Deck",
+        "module": "CLQU"
+    },
+    {
+        "no": 29,
+        "masterTag": "CLQU-F-5701A",
+        "equipName": "Service  Water  Filter",
+        "deckArea": "Cellar Deck",
+        "module": "CLQU"
+    },
+    {
+        "no": 30,
+        "masterTag": "CLQU-F-5701B",
+        "equipName": "Service  Water  Filter",
+        "deckArea": "Cellar Deck",
+        "module": "CLQU"
+    },
+    {
+        "no": 31,
+        "masterTag": "CLQU-HAH-9003A",
+        "equipName": "Air Handling Unit-2",
+        "deckArea": "Mezzanine Deck",
+        "module": "CLQU"
+    },
+    {
+        "no": 32,
+        "masterTag": "CLQU-HAH-9003B",
+        "equipName": "Air Handling Unit-1",
+        "deckArea": "Mezzanine Deck",
+        "module": "CLQU"
+    },
+    {
+        "no": 33,
+        "masterTag": "CLQU-PK-5902",
+        "equipName": "Jet Fuel System",
+        "deckArea": "Mezzanine Deck",
+        "module": "CLQU"
+    },
+    {
+        "no": 34,
+        "masterTag": "CLQU-HCW-9001A",
+        "equipName": "Chiller Unit-2",
+        "deckArea": "Mezzanine Deck",
+        "module": "CLQU"
+    },
+    {
+        "no": 35,
+        "masterTag": "CLQU-HCW-9001B",
+        "equipName": "Chiller Unit-1",
+        "deckArea": "Mezzanine Deck",
+        "module": "CLQU"
+    },
+    {
+        "no": 36,
+        "masterTag": "CLQU-HCW-9001B",
+        "equipName": "Chw Bufer Tank",
+        "deckArea": "Mezzanine Deck",
+        "module": "CLQU"
+    },
+    {
+        "no": 37,
+        "masterTag": "CLQU-CR-9101",
+        "equipName": "Adaptor Pedestal",
+        "deckArea": "Upper Deck",
+        "module": "CLQU"
+    },
+    {
+        "no": 38,
+        "masterTag": "CLQU-CR-9101",
+        "equipName": "Pedestal Crane",
+        "deckArea": "Upper Deck",
+        "module": "CLQU"
+    },
+    {
+        "no": 39,
+        "masterTag": "CLQU-RSC-8601",
+        "equipName": "Survival Craft (90 Man) With Launch/Retrieval Davit",
+        "deckArea": "Upper Deck",
+        "module": "CLQU"
+    },
+    {
+        "no": 40,
+        "masterTag": "CLQU-RSD-8601",
+        "equipName": "Retrieval Davit",
+        "deckArea": "Upper Deck",
+        "module": "CLQU"
+    },
+    {
+        "no": 41,
+        "masterTag": "CLQU-RSC-8602",
+        "equipName": "Survival Craft (90 Man) With Launch/Retrieval Davit",
+        "deckArea": "Upper Deck",
+        "module": "CLQU"
+    },
+    {
+        "no": 42,
+        "masterTag": "CLQU-RSD-8602",
+        "equipName": "Retrieval Davit",
+        "deckArea": "Upper Deck",
+        "module": "CLQU"
+    },
+    {
+        "no": 43,
+        "masterTag": "CLQU-PK-5802",
+        "equipName": "Potable Water Maker Package No.2",
+        "deckArea": "Upper Deck",
+        "module": "CLQU"
+    },
+    {
+        "no": 44,
+        "masterTag": "CLQU-PK-5801",
+        "equipName": "Potable Water Maker Package No.1",
+        "deckArea": "Upper Deck",
+        "module": "CLQU"
+    },
+    {
+        "no": 47,
+        "masterTag": "CLQU-CRB-9102",
+        "equipName": "Bridge Crane",
+        "deckArea": "Cellar Deck",
+        "module": "CLQU"
+    },
+    {
+        "no": 51,
+        "masterTag": "CLQM-HAH-9002A",
+        "equipName": "Air Handling Unit (Duty)",
+        "deckArea": "ROOF",
+        "module": "CLQM"
+    },
+    {
+        "no": 52,
+        "masterTag": "CLQM-HAH-9002B",
+        "equipName": "Air Handling Unit  (Standby)",
+        "deckArea": "ROOF",
+        "module": "CLQM"
+    },
+    {
+        "no": 53,
+        "masterTag": "CLQM-PK-5901",
+        "equipName": "Aviation Fuel Dispensation Package",
+        "deckArea": "HELI DECK",
+        "module": "CLQM"
+    },
+    {
+        "no": 54,
+        "masterTag": "CLQM-PK-4901",
+        "equipName": "Hot Water Calorifier Skid Package",
+        "deckArea": "ROOF",
+        "module": "CLQM"
+    },
+    {
+        "no": 55,
+        "masterTag": "CLQM-PK-8101",
+        "equipName": "Diffs Package (Deck Integrated Fire Fighthing System) Lqu-P66",
+        "deckArea": "ROOF",
+        "module": "CLQM"
+    }
+]
