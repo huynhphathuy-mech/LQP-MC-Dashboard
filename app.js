@@ -1373,8 +1373,11 @@ function renderDashboardWidgets(mcData, dashGroups) {
     const container = document.getElementById('dash-widgets-container');
     if (!container) return;
 
-    const createWidgetHtml = (title, dataObj, isOverall) => {
+    const createWidgetHtml = (title, dataObj, isOverall, dacGroupKey) => {
         const getPct = (d, t) => t > 0 ? ((d / t) * 100).toFixed(1) : 0;
+        const scopeArg = (typeof window.getActiveExecScope === 'function') ? window.getActiveExecScope() : 'ALL';
+        const sysArg = (typeof window.getActiveExecSys === 'function') ? window.getActiveExecSys() : 'ALL';
+        const dacKey = dacGroupKey || 'ALL';
         
         return `
             <div class="card mc-widget">
@@ -1392,7 +1395,7 @@ function renderDashboardWidgets(mcData, dashGroups) {
                         <div class="progress-bar"><div class="progress-fill fill-blue" style="width:${getPct(dataObj.itrA.done, dataObj.itrA.total)}%"></div></div>
                     </div>
                     
-                    <div class="mc-item mc-item-link" onclick="jumpToMcTab()">
+                    <div class="mc-item mc-item-link" onclick="openPunchModal('ALL', 'A')" title="Click to inspect Punch Cat A Register">
                         <div class="mc-info">
                             <span class="mc-label">Punch A Closed</span>
                             <span class="mc-value">${dataObj.punchA.done.toLocaleString()} / ${dataObj.punchA.total.toLocaleString()} <span class="pct pct-red">${getPct(dataObj.punchA.done, dataObj.punchA.total)}%</span></span>
@@ -1400,7 +1403,7 @@ function renderDashboardWidgets(mcData, dashGroups) {
                         <div class="progress-bar"><div class="progress-fill fill-red" style="width:${getPct(dataObj.punchA.done, dataObj.punchA.total)}%"></div></div>
                     </div>
                     
-                    <div class="mc-item mc-item-link" onclick="jumpToMcTab()">
+                    <div class="mc-item mc-item-link" onclick="openPunchModal('ALL', 'B')" title="Click to inspect Punch Cat B Register">
                         <div class="mc-info">
                             <span class="mc-label">Punch B Closed</span>
                             <span class="mc-value">${dataObj.punchB.done.toLocaleString()} / ${dataObj.punchB.total.toLocaleString()} <span class="pct pct-yellow">${getPct(dataObj.punchB.done, dataObj.punchB.total)}%</span></span>
@@ -1408,7 +1411,7 @@ function renderDashboardWidgets(mcData, dashGroups) {
                         <div class="progress-bar"><div class="progress-fill fill-yellow" style="width:${getPct(dataObj.punchB.done, dataObj.punchB.total)}%"></div></div>
                     </div>
                     
-                    <div class="mc-item mc-item-link" onclick="jumpToMcTab()">
+                    <div class="mc-item mc-item-link" onclick="openCertModal('DAC', '${dacKey}', '${scopeArg}', '${sysArg}')" title="Click to open DAC Certificate Register (${title})">
                         <div class="mc-info">
                             <span class="mc-label">DAC (Discipline)</span>
                             <span class="mc-value">${dataObj.dac.done.toLocaleString()} / ${dataObj.dac.total.toLocaleString()} <span class="pct pct-purple">${getPct(dataObj.dac.done, dataObj.dac.total)}%</span></span>
@@ -1416,7 +1419,7 @@ function renderDashboardWidgets(mcData, dashGroups) {
                         <div class="progress-bar"><div class="progress-fill fill-purple" style="width:${getPct(dataObj.dac.done, dataObj.dac.total)}%"></div></div>
                     </div>
                     
-                    <div class="mc-item mc-item-link" onclick="jumpToMcTab()" ${isOverall ? '' : 'style="display:none;"'}>
+                    <div class="mc-item mc-item-link" onclick="openCertModal('CSSC', 'ALL', '${scopeArg}', '${sysArg}')" title="Click to open CSSC Certificate Register" ${isOverall ? '' : 'style="display:none;"'}>
                         <div class="mc-info">
                             <span class="mc-label">CSSC (Subsystem)</span>
                             <span class="mc-value">${dataObj.cssc.done.toLocaleString()} / ${dataObj.cssc.total.toLocaleString()} <span class="pct pct-green">${getPct(dataObj.cssc.done, dataObj.cssc.total)}%</span></span>
@@ -1429,19 +1432,19 @@ function renderDashboardWidgets(mcData, dashGroups) {
     };
 
     let html = '';
-    html += createWidgetHtml('OVERALL (All Disciplines)', mcData, true);
-    html += createWidgetHtml('MECHANICAL', dashGroups.MECHANICAL, false);
-    html += createWidgetHtml('SAFETY', dashGroups.SAFETY, false);
-    html += createWidgetHtml('HVAC', dashGroups.HVAC, false);
-    html += createWidgetHtml('PIPING', dashGroups.PIPING, false);
-    html += createWidgetHtml('ELECTRICAL, TELECOM & INST', dashGroups.ETC, false);
+    html += createWidgetHtml('OVERALL (All Disciplines)', mcData, true, 'ALL');
+    html += createWidgetHtml('MECHANICAL', dashGroups.MECHANICAL, false, 'MECH');
+    html += createWidgetHtml('SAFETY', dashGroups.SAFETY, false, 'SAFE');
+    html += createWidgetHtml('HVAC', dashGroups.HVAC, false, 'HVAC');
+    html += createWidgetHtml('PIPING', dashGroups.PIPING, false, 'PIPI');
+    html += createWidgetHtml('ELECTRICAL, TELECOM & INST', dashGroups.ETC, false, 'ETC');
     
     // Support backward compatibility if old data.json is loaded
     if (dashGroups.ARCH_STR) {
-        html += createWidgetHtml('ARCHITECTURE & STRUCTURE', dashGroups.ARCH_STR, false);
+        html += createWidgetHtml('ARCHITECTURE & STRUCTURE', dashGroups.ARCH_STR, false, 'ALL');
     } else {
-        html += createWidgetHtml('ARCHITECTURE', dashGroups.ARCH || initDashGroup(), false);
-        html += createWidgetHtml('STRUCTURE', dashGroups.STR || initDashGroup(), false);
+        html += createWidgetHtml('ARCHITECTURE', dashGroups.ARCH || initDashGroup(), false, 'ARCH');
+        html += createWidgetHtml('STRUCTURE', dashGroups.STR || initDashGroup(), false, 'STRU');
     }
     
     container.innerHTML = html;
@@ -1500,7 +1503,12 @@ function renderSummaryWidgets(mcData, sumItr, sumPunch, sumDac, sumCssc) {
 
     // 3. DAC
     const tr3 = document.getElementById('sum-dac-total');
-    if (tr3) tr3.innerHTML = `${mcData.dac.done.toLocaleString()} / ${mcData.dac.total.toLocaleString()} <span style="font-size:0.75rem; color:#a855f7;">${mcData.dac.total > 0 ? ((mcData.dac.done/mcData.dac.total)*100).toFixed(1) : 0}%</span>`;
+    if (tr3) {
+        tr3.style.cursor = 'pointer';
+        tr3.title = 'Click to view All DAC Certificates';
+        tr3.onclick = () => openCertModal('DAC', 'ALL');
+        tr3.innerHTML = `${mcData.dac.done.toLocaleString()} / ${mcData.dac.total.toLocaleString()} <span style="font-size:0.75rem; color:#a855f7;">${mcData.dac.total > 0 ? ((mcData.dac.done/mcData.dac.total)*100).toFixed(1) : 0}%</span>`;
+    }
     const gr3 = document.getElementById('grid-dac');
     if (gr3) {
         gr3.innerHTML = '';
@@ -1512,7 +1520,12 @@ function renderSummaryWidgets(mcData, sumItr, sumPunch, sumDac, sumCssc) {
 
     // 4. CSSC
     const tr4 = document.getElementById('sum-cssc-total');
-    if (tr4) tr4.innerHTML = `${mcData.cssc.done.toLocaleString()} / ${mcData.cssc.total.toLocaleString()} <span style="font-size:0.75rem; color:#10b981;">${mcData.cssc.total > 0 ? ((mcData.cssc.done/mcData.cssc.total)*100).toFixed(1) : 0}%</span>`;
+    if (tr4) {
+        tr4.style.cursor = 'pointer';
+        tr4.title = 'Click to view All CSSC Certificates';
+        tr4.onclick = () => openCertModal('CSSC', 'ALL');
+        tr4.innerHTML = `${mcData.cssc.done.toLocaleString()} / ${mcData.cssc.total.toLocaleString()} <span style="font-size:0.75rem; color:#10b981;">${mcData.cssc.total > 0 ? ((mcData.cssc.done/mcData.cssc.total)*100).toFixed(1) : 0}%</span>`;
+    }
     const gr4 = document.getElementById('grid-cssc');
     if (gr4) {
         gr4.innerHTML = '';
@@ -2795,41 +2808,300 @@ function setupPunchModalEvents() {
     }
 }
 
-function openCertModal(type, group) {
-    const gd = window.GLOBAL_MC_DATA;
-    if (!gd) return;
-    
-    document.getElementById('cert-modal').style.display = 'flex';
-    document.getElementById('cert-modal-title').innerHTML = `${type} ${group} <span style="font-size: 0.8rem; font-weight: 400; color: #94a3b8; margin-left: 10px;">Details</span>`;
-    
-    let certs = [];
-    if (type === 'DAC') {
-        certs = gd.globalCertList.filter(c => c.type === 'DAC' && c.disc === group);
-    } else {
-        certs = gd.globalCertList.filter(c => c.type === 'CSSC' && c.subsys === group);
+// =========================================================================
+// ----------------- CERTIFICATE REGISTER MODAL (DAC / CSSC / RFC) ---------
+// =========================================================================
+let certModalState = {
+    type: 'DAC',         // 'DAC' | 'CSSC' | 'RFC'
+    scope: 'ALL',        // 'ALL' | 'CLQM' | 'CLQU'
+    disc: 'ALL',         // 'ALL' | 'MECH' | 'PIPI' | 'ETC' | ...
+    subtype: 'ALL',      // 'ALL' | 'CC-DAC' | 'PC-DAC'
+    sys: 'ALL',
+    subsys: 'ALL',
+    status: 'ALL',       // 'ALL' | 'OPEN' | 'CLOSED'
+    search: '',
+    baseList: [],
+    filteredList: [],
+    eventsBound: false
+};
+
+function bindCertModalEventsOnce() {
+    if (certModalState.eventsBound) return;
+    certModalState.eventsBound = true;
+
+    const certModal = document.getElementById('cert-modal');
+    if (certModal) {
+        certModal.addEventListener('click', (e) => {
+            if (e.target === certModal) certModal.style.display = 'none';
+        });
     }
-    
+
+    const elScope = document.getElementById('cert-filter-scope');
+    const elDisc = document.getElementById('cert-filter-disc');
+    const elSubtype = document.getElementById('cert-filter-subtype');
+    const elSys = document.getElementById('cert-filter-sys');
+    const elSubsys = document.getElementById('cert-filter-subsys');
+    const elSearch = document.getElementById('cert-search-input');
+    const btnAll = document.getElementById('cert-status-all');
+    const btnOpen = document.getElementById('cert-status-open');
+    const btnClosed = document.getElementById('cert-status-closed');
+    const btnExport = document.getElementById('btn-export-cert-excel');
+
+    if (elScope) elScope.addEventListener('change', () => {
+        certModalState.scope = elScope.value;
+        certModalState.sys = 'ALL';
+        certModalState.subsys = 'ALL';
+        populateCertDropdowns();
+        renderCertModalTable();
+    });
+    if (elDisc) elDisc.addEventListener('change', () => {
+        certModalState.disc = elDisc.value;
+        certModalState.sys = 'ALL';
+        certModalState.subsys = 'ALL';
+        populateCertDropdowns();
+        renderCertModalTable();
+    });
+    if (elSubtype) elSubtype.addEventListener('change', () => {
+        certModalState.subtype = elSubtype.value;
+        renderCertModalTable();
+    });
+    if (elSys) elSys.addEventListener('change', () => {
+        certModalState.sys = elSys.value;
+        certModalState.subsys = 'ALL';
+        populateCertSubsysDropdown();
+        renderCertModalTable();
+    });
+    if (elSubsys) elSubsys.addEventListener('change', () => {
+        certModalState.subsys = elSubsys.value;
+        renderCertModalTable();
+    });
+    if (elSearch) elSearch.addEventListener('input', () => {
+        certModalState.search = elSearch.value.trim().toLowerCase();
+        renderCertModalTable();
+    });
+    if (btnAll) btnAll.addEventListener('click', () => { certModalState.status = 'ALL'; renderCertModalTable(); });
+    if (btnOpen) btnOpen.addEventListener('click', () => { certModalState.status = 'OPEN'; renderCertModalTable(); });
+    if (btnClosed) btnClosed.addEventListener('click', () => { certModalState.status = 'CLOSED'; renderCertModalTable(); });
+    if (btnExport) btnExport.addEventListener('click', exportCertRegisterToExcel);
+}
+
+function getCertBaseByScopeAndDisc() {
+    return certModalState.baseList.filter(c => {
+        const sub = String(c.subsys || c.sys || '').trim().toUpperCase();
+        if (certModalState.scope !== 'ALL' && !sub.startsWith(certModalState.scope)) return false;
+        if (certModalState.type === 'DAC' && certModalState.disc !== 'ALL') {
+            if (certModalState.disc === 'ETC') {
+                if (!['ELEC', 'TELE', 'INST'].includes(c.disc)) return false;
+            } else if (c.disc !== certModalState.disc) {
+                return false;
+            }
+        }
+        return true;
+    });
+}
+
+function populateCertDropdowns() {
+    const list = getCertBaseByScopeAndDisc();
+    const elSys = document.getElementById('cert-filter-sys');
+    if (elSys) {
+        const systems = Array.from(new Set(list.map(c => String(c.sys || '').trim()).filter(Boolean))).sort();
+        elSys.innerHTML = `<option value="ALL">All Systems (${systems.length})</option>` +
+            systems.map(s => `<option value="${s}" ${certModalState.sys === s ? 'selected' : ''}>${s}</option>`).join('');
+    }
+    populateCertSubsysDropdown();
+}
+
+function populateCertSubsysDropdown() {
+    let list = getCertBaseByScopeAndDisc();
+    if (certModalState.sys !== 'ALL') {
+        list = list.filter(c => String(c.sys || '').trim() === certModalState.sys);
+    }
+    const elSubsys = document.getElementById('cert-filter-subsys');
+    if (elSubsys) {
+        const subs = Array.from(new Set(list.map(c => String(c.subsys || '').trim()).filter(Boolean))).sort();
+        elSubsys.innerHTML = `<option value="ALL">All SubSystems (${subs.length})</option>` +
+            subs.map(s => `<option value="${s}" ${certModalState.subsys === s ? 'selected' : ''}>${s}</option>`).join('');
+    }
+}
+
+function renderCertModalTable() {
+    let list = getCertBaseByScopeAndDisc();
+
+    if (certModalState.type === 'DAC' && certModalState.subtype !== 'ALL') {
+        list = list.filter(c => String(c.cert || '').toUpperCase().includes(certModalState.subtype));
+    }
+    if (certModalState.sys !== 'ALL') {
+        list = list.filter(c => String(c.sys || '').trim() === certModalState.sys);
+    }
+    if (certModalState.subsys !== 'ALL') {
+        list = list.filter(c => String(c.subsys || '').trim() === certModalState.subsys);
+    }
+    if (certModalState.search) {
+        const q = certModalState.search;
+        list = list.filter(c =>
+            String(c.cert || '').toLowerCase().includes(q) ||
+            String(c.disc || '').toLowerCase().includes(q) ||
+            String(c.sys || '').toLowerCase().includes(q) ||
+            String(c.subsys || '').toLowerCase().includes(q) ||
+            String(c.status || '').toLowerCase().includes(q)
+        );
+    }
+
+    // Compute counts BEFORE status button filter so status pills show accurate Open/Closed counts
+    const totalAll = list.length;
+    const closedAll = list.filter(c => c.status === 'CLOSED').length;
+    const openAll = totalAll - closedAll;
+    const pctAll = totalAll > 0 ? ((closedAll / totalAll) * 100).toFixed(1) + '%' : '0.0%';
+
+    const elTotal = document.getElementById('cert-stat-total');
+    const elClosed = document.getElementById('cert-stat-closed');
+    const elOpen = document.getElementById('cert-stat-open');
+    const elPct = document.getElementById('cert-stat-pct');
+    if (elTotal) elTotal.textContent = totalAll.toLocaleString();
+    if (elClosed) elClosed.textContent = closedAll.toLocaleString();
+    if (elOpen) elOpen.textContent = openAll.toLocaleString();
+    if (elPct) elPct.textContent = pctAll;
+
+    const btnAll = document.getElementById('cert-status-all');
+    const btnOpen = document.getElementById('cert-status-open');
+    const btnClosed = document.getElementById('cert-status-closed');
+    if (btnAll) {
+        btnAll.textContent = `All (${totalAll})`;
+        btnAll.style.background = certModalState.status === 'ALL' ? '#0ea5e9' : '#fff';
+        btnAll.style.color = certModalState.status === 'ALL' ? '#fff' : '#334155';
+    }
+    if (btnOpen) {
+        btnOpen.textContent = `Open (${openAll})`;
+        btnOpen.style.background = certModalState.status === 'OPEN' ? '#ef4444' : '#fff';
+        btnOpen.style.color = certModalState.status === 'OPEN' ? '#fff' : '#ef4444';
+    }
+    if (btnClosed) {
+        btnClosed.textContent = `Closed (${closedAll})`;
+        btnClosed.style.background = certModalState.status === 'CLOSED' ? '#10b981' : '#fff';
+        btnClosed.style.color = certModalState.status === 'CLOSED' ? '#fff' : '#10b981';
+    }
+
+    // Apply Status filter for display table
+    let displayList = list;
+    if (certModalState.status === 'OPEN') {
+        displayList = list.filter(c => c.status !== 'CLOSED');
+    } else if (certModalState.status === 'CLOSED') {
+        displayList = list.filter(c => c.status === 'CLOSED');
+    }
+    certModalState.filteredList = displayList;
+
+    const tbody = document.getElementById('cert-tbody');
+    if (!tbody) return;
+    if (displayList.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding: 2.5rem; color: #64748b; font-style: italic;">No certificates match the selected filters.</td></tr>';
+        return;
+    }
+
     let tbodyHtml = '';
-    let idx = 1;
-    certs.forEach(c => {
+    displayList.forEach((c, idx) => {
         const isClosed = c.status === 'CLOSED';
-        const stColor = isClosed ? '#10b981' : '#ef4444';
+        const badgeStyle = isClosed
+            ? 'background:#dcfce7; color:#15803d; border:1px solid #86efac;'
+            : 'background:#fee2e2; color:#b91c1c; border:1px solid #fca5a5;';
         tbodyHtml += `
             <tr>
-                <td>${idx++}</td>
+                <td>${idx + 1}</td>
                 <td><b>${c.cert}</b></td>
-                <td>${c.disc}</td>
-                <td>${c.sys}</td>
-                <td>${c.subsys}</td>
-                <td style="color: ${stColor}; font-weight: 700;">${c.status}</td>
+                <td>${c.disc || '-'}</td>
+                <td>${c.sys || '-'}</td>
+                <td><b>${c.subsys || '-'}</b></td>
+                <td><span style="${badgeStyle} padding: 2px 8px; border-radius: 999px; font-size: 0.72rem; font-weight: 800;">${c.status}</span></td>
                 <td>${formatDateStr(c.plan)}</td>
                 <td>${formatDateStr(c.act)}</td>
             </tr>
         `;
     });
-    
-    document.getElementById('cert-tbody').innerHTML = tbodyHtml;
+    tbody.innerHTML = tbodyHtml;
 }
+
+function exportCertRegisterToExcel() {
+    if (typeof XLSX === 'undefined') {
+        alert("Excel library not loaded.");
+        return;
+    }
+    const list = certModalState.filteredList || [];
+    if (list.length === 0) {
+        alert("No certificates to export.");
+        return;
+    }
+    const rows = [['#', 'Certificate', 'Discipline', 'System', 'SubSystem', 'Status', 'Plan Finish', 'Actual Finish']];
+    list.forEach((c, i) => {
+        rows.push([i + 1, c.cert, c.disc || '', c.sys || '', c.subsys || '', c.status, formatDateStr(c.plan), formatDateStr(c.act)]);
+    });
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Certificate_Register");
+    XLSX.writeFile(wb, `LQP_${certModalState.type}_${certModalState.disc}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+}
+
+function openCertModal(type, group, scope, sys) {
+    const gd = window.GLOBAL_MC_DATA;
+    if (!gd) return;
+    bindCertModalEventsOnce();
+
+    certModalState.type = type || 'DAC';
+    certModalState.scope = scope || 'ALL';
+    certModalState.subtype = 'ALL';
+    certModalState.sys = sys || 'ALL';
+    certModalState.subsys = 'ALL';
+    certModalState.status = 'ALL';
+    certModalState.search = '';
+
+    if (certModalState.type === 'DAC') {
+        certModalState.baseList = (gd.globalCertList || []).filter(c => c.type === 'DAC');
+        certModalState.disc = group || 'ALL';
+    } else if (certModalState.type === 'CSSC') {
+        certModalState.baseList = (gd.globalCertList || []).filter(c => c.type === 'CSSC');
+        certModalState.disc = 'ALL';
+        if (group && group !== 'ALL') {
+            certModalState.subsys = group;
+        }
+    } else if (certModalState.type === 'RFC') {
+        const rfcMap = gd.rfcMap || {};
+        certModalState.baseList = Object.keys(rfcMap).sort().map(sub => ({
+            type: 'RFC',
+            cert: 'RFC',
+            disc: '',
+            sys: extractSystem(sub),
+            subsys: sub,
+            status: (rfcMap[sub] && rfcMap[sub].done) ? 'CLOSED' : 'OPEN',
+            plan: '',
+            act: (rfcMap[sub] && rfcMap[sub].date) || ''
+        }));
+        certModalState.disc = 'ALL';
+        if (group && group !== 'ALL') certModalState.subsys = group;
+    }
+
+    // Sync filter controls with state
+    const elScope = document.getElementById('cert-filter-scope');
+    const elDisc = document.getElementById('cert-filter-disc');
+    const elSubtype = document.getElementById('cert-filter-subtype');
+    const elSearch = document.getElementById('cert-search-input');
+
+    if (elScope) elScope.value = certModalState.scope;
+    if (elDisc) {
+        elDisc.style.display = certModalState.type === 'DAC' ? 'inline-block' : 'none';
+        elDisc.value = certModalState.disc;
+    }
+    if (elSubtype) {
+        elSubtype.style.display = certModalState.type === 'DAC' ? 'inline-block' : 'none';
+        elSubtype.value = 'ALL';
+    }
+    if (elSearch) elSearch.value = '';
+
+    const labelGrp = (group && group !== 'ALL') ? ` — ${group}` : ' (All)';
+    document.getElementById('cert-modal-title').innerHTML = `${certModalState.type}${labelGrp} <span style="font-size: 0.8rem; font-weight: 400; color: #94a3b8; margin-left: 10px;">Certificate Register</span>`;
+    document.getElementById('cert-modal').style.display = 'flex';
+
+    populateCertDropdowns();
+    renderCertModalTable();
+}
+window.openCertModal = openCertModal;
 
 // =========================================================================
 // ----------------- CHECKSHEET DETAIL MODAL LOGIC -------------------------
