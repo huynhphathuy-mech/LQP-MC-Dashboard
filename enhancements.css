@@ -4,17 +4,56 @@
    Admin Mode & Viewer Read-Only Protection, Share QR, Export PDF, Toast UI
    ============================================================================ */
 
-/* --- Compact Enhanced Navbar --- */
+/* --- Compact 2-Row Executive Navbar --- */
 .app-navbar {
     height: auto !important;
     min-height: 44px;
-    flex-wrap: wrap;
-    gap: 0.4rem 0.65rem;
-    padding: 0.35rem 0.85rem !important;
+    display: flex !important;
+    flex-wrap: wrap !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 0.35rem 0.75rem !important;
+    padding: 0.45rem 0.9rem 0.38rem !important;
 }
-.navbar-brand { margin-right: 1rem !important; }
-.app-tabs { flex-wrap: wrap; gap: 0.25rem !important; }
-.navbar-actions { flex-wrap: wrap; gap: 0.35rem !important; }
+.navbar-brand {
+    order: 1;
+    margin-right: auto !important;
+    flex-shrink: 0;
+}
+.navbar-actions {
+    order: 2;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 0.35rem !important;
+}
+.navbar-actions .status-indicator {
+    display: none !important;
+}
+.app-tabs {
+    order: 3;
+    flex: 1 0 100% !important;
+    width: 100% !important;
+    height: auto !important;
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    align-items: center;
+    gap: 0.35rem !important;
+    padding-top: 0.38rem;
+    margin-top: 0.12rem;
+    border-top: 1px solid rgba(148, 163, 184, 0.16);
+    overflow-x: auto;
+    scrollbar-width: none;
+}
+.app-tabs::-webkit-scrollbar { display: none; }
+.app-tabs .tab-btn {
+    white-space: nowrap !important;
+    flex-shrink: 0;
+    padding: 0.32rem 0.72rem !important;
+    font-size: 0.78rem !important;
+    border-radius: 6px !important;
+}
 
 .btn-pill {
     display: inline-flex;
