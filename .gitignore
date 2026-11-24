@@ -1,0 +1,18 @@
+# Local secrets & credentials (NEVER commit to GitHub)
+.env
+*.env
+
+# Local backups & debug files
+_backup_original/
+scripts/debug_logs/
+scripts/_setup_and_inspect.py
+scripts/_verify_and_build_all.py
+__pycache__/
+*.pyc
+
+# Raw Excel exports (keep repo lightweight & clean)
+*.xlsx
+*.xlsm
+*.xls
+*.tmp
+~$*
