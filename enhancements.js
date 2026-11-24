@@ -328,6 +328,14 @@
 
         if (Array.isArray(manual.siteWalkdownPunches)) {
             gd.siteWalkdownPunches = manual.siteWalkdownPunches;
+            // Sync cloud manual_data.json into localStorage so app.js loadSiteWalkdownPunches() stays 100% consistent
+            try {
+                const prev = localStorage.getItem("LQP_SITE_WALKDOWN_PUNCHES");
+                if (prev && !localStorage.getItem("LQP_SITE_WALKDOWN_BACKUP_PRE_CLOUD")) {
+                    localStorage.setItem("LQP_SITE_WALKDOWN_BACKUP_PRE_CLOUD", prev);
+                }
+                localStorage.setItem("LQP_SITE_WALKDOWN_PUNCHES", JSON.stringify(manual.siteWalkdownPunches));
+            } catch (e) {}
             if (typeof siteWalkdownPunches !== "undefined") {
                 try { siteWalkdownPunches = manual.siteWalkdownPunches; } catch (e) {}
             }
@@ -486,6 +494,9 @@
             }
             if (typeof applyLoadedData === "function") {
                 applyLoadedData(window.GLOBAL_MC_DATA, latestUpdatedAt);
+            }
+            if (typeof renderSiteWalkdownTab === "function") {
+                renderSiteWalkdownTab();
             }
             if (typeof saveToDB === "function") {
                 saveToDB("global_mc_data", { updateDate: mainJson.updateDate, updatedAt: latestUpdatedAt, data: window.GLOBAL_MC_DATA });
