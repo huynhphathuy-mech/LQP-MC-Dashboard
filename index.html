@@ -115,9 +115,50 @@
 
                 <div class="card" style="background: #fff; border-color: #cbd5e1; margin-top: 1rem; margin-bottom: 2rem;">
 
-                    <div class="card-header" style="border-bottom: 1px solid #e2e8f0; background: #f8fafc;">
+                    <div class="card-header" style="border-bottom: 1px solid #e2e8f0; background: #f8fafc; display: flex; justify-content: space-between; align-items: center; padding: 0.65rem 1rem; flex-wrap: wrap; gap: 0.6rem;">
 
-                        <h3 style="color: #0f172a;" id="mdl-table-title">Subsystem Summary</h3>
+                        <h3 style="color: #0f172a; margin: 0; font-size: 0.95rem;" id="mdl-table-title">Subsystem Summary</h3>
+
+                        <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+
+                            <!-- Scope Filter -->
+                            <select id="mdl-filter-scope" style="background: #fff; border: 1px solid #cbd5e1; color: #0f172a; padding: 0.34rem 0.55rem; border-radius: 6px; font-size: 0.78rem; font-weight: 600; outline: none; cursor: pointer;">
+                                <option value="ALL">All LQ (CLQM+CLQU)</option>
+                                <option value="CLQM">CLQM (LQ Module)</option>
+                                <option value="CLQU">CLQU (LQ Utility)</option>
+                            </select>
+
+                            <!-- System Filter -->
+                            <select id="mdl-filter-sys" style="background: #fff; border: 1px solid #cbd5e1; color: #0f172a; padding: 0.34rem 0.55rem; border-radius: 6px; font-size: 0.78rem; font-weight: 600; outline: none; cursor: pointer; min-width: 125px;">
+                                <option value="ALL">All Systems</option>
+                            </select>
+
+                            <!-- SubSystem Filter -->
+                            <select id="mdl-filter-subsys" style="background: #fff; border: 1px solid #cbd5e1; color: #0f172a; padding: 0.34rem 0.55rem; border-radius: 6px; font-size: 0.78rem; font-weight: 600; outline: none; cursor: pointer; min-width: 140px;">
+                                <option value="ALL">All SubSystems</option>
+                            </select>
+
+                            <!-- ITR Status Filter -->
+                            <select id="mdl-filter-itr" style="background: #fff; border: 1px solid #cbd5e1; color: #0f172a; padding: 0.34rem 0.55rem; border-radius: 6px; font-size: 0.78rem; font-weight: 600; outline: none; cursor: pointer;">
+                                <option value="ALL">All ITR Status</option>
+                                <option value="DONE">ITR Done (100%)</option>
+                                <option value="HAS_DONE">Has ITR Done (&gt;0)</option>
+                                <option value="IN_PROGRESS">In Progress (1-99%)</option>
+                                <option value="NOT_STARTED">Not Started (0%)</option>
+                                <option value="INCOMPLETE">Incomplete (&lt;100%)</option>
+                                <option value="HAS_ITR">Has ITR-A (Total &gt; 0)</option>
+                                <option value="NO_ITR">No ITR-A (Punch Only)</option>
+                            </select>
+
+                            <!-- Quick Search -->
+                            <input type="text" id="mdl-search-input" placeholder="Search SubSystem / Desc..." style="background: #fff; border: 1px solid #cbd5e1; color: #0f172a; padding: 0.34rem 0.65rem; border-radius: 6px; font-size: 0.78rem; width: 170px; outline: none;">
+
+                            <!-- Export Excel -->
+                            <button type="button" id="btn-export-disc-subsys" style="background: #10b981; border: none; padding: 0.36rem 0.75rem; font-size: 0.78rem; border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; gap: 0.3rem; color: #fff; font-weight: 700;">
+                                📥 Export Excel
+                            </button>
+
+                        </div>
 
                     </div>
 
@@ -177,7 +218,7 @@
 
     <!-- Punch Modal (Phase 7) -->
 
-    <div id="punch-modal" class="modal-overlay" style="display: none;">
+    <div id="punch-modal" class="modal-overlay" style="display: none; z-index: 10010;">
 
         <div class="modal-content">
 
@@ -396,7 +437,7 @@
 
     <!-- Certificate Modal (Phase 7 - Enhanced with System/Subsystem/Status/Type Filters) -->
 
-    <div id="cert-modal" class="modal-overlay" style="display: none;">
+    <div id="cert-modal" class="modal-overlay" style="display: none; z-index: 10010;">
 
         <div class="modal-content">
 
@@ -3394,8 +3435,8 @@
 
     <script src="data.js"></script>
     <script src="manual_data.js"></script>
-    <script src="app.js?v=2.5"></script>
-    <script src="enhancements.js?v=2.5"></script>
+    <script src="app.js?v=2.6"></script>
+    <script src="enhancements.js?v=2.6"></script>
 
 </body>
 
