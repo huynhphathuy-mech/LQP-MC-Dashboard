@@ -1582,15 +1582,21 @@ function renderPunchCell(d, t, isRedZero, sub, disc, cat) {
 window.openSubsysPunchDetail = function(subsys, disc, cat) {
     const gd = window.GLOBAL_MC_DATA;
     if (!gd) return;
-    openPunchModal('ALL', cat);
-    currentPunchDiscFilter = disc;
-    const searchInput = document.getElementById('punch-search-input');
-    if (searchInput) {
-        searchInput.value = subsys;
-        currentPunchSearch = subsys;
+    const subStr = String(subsys || '').trim();
+    const sysStr = extractSystem(subStr);
+    const upperSub = subStr.toUpperCase();
+    const scopeStr = upperSub.startsWith('CLQM') ? 'CLQM' : (upperSub.startsWith('CLQU') ? 'CLQU' : 'ALL');
+
+    openPunchModal('ALL', cat || 'ALL', scopeStr, sysStr);
+    currentPunchSubsys = subStr || 'ALL';
+    currentPunchDiscFilter = disc || 'ALL';
+
+    populatePunchSubsysDropdown();
+    const subSel = document.getElementById('punch-filter-subsys');
+    if (subSel && currentPunchSubsys !== 'ALL') {
+        subSel.value = currentPunchSubsys;
     }
-    renderPunchTopBoxes();
-    renderPunchModalTable();
+    refreshPunchModalData();
 };
 
 function renderItrCell(d, t, sub, disc) {
@@ -2035,22 +2041,287 @@ function renderSkylineChart(labels, planBar, actBar, planLine, actLine) {
     });
 }
 
-// ----------------- MODAL LOGIC (Phase 6) -----------------
+// ----------------- MODAL LOGIC (Phase 6 - Enhanced with System/SubSystem/ITR Filters & Punch Drilldown) -----------------
+let discModalState = {
+    disc: 'MECHANICAL',
+    scope: 'ALL',
+    sys: 'ALL',
+    subsys: 'ALL',
+    itrStatus: 'ALL',
+    search: '',
+    allItems: [],
+    filteredItems: [],
+    eventsBound: false
+};
+
+function bindDiscModalEventsOnce() {
+    if (discModalState.eventsBound) return;
+    discModalState.eventsBound = true;
+
+    const elScope = document.getElementById('mdl-filter-scope');
+    const elSys = document.getElementById('mdl-filter-sys');
+    const elSubsys = document.getElementById('mdl-filter-subsys');
+    const elItr = document.getElementById('mdl-filter-itr');
+    const elSearch = document.getElementById('mdl-search-input');
+    const btnExport = document.getElementById('btn-export-disc-subsys');
+
+    if (elScope) elScope.addEventListener('change', () => {
+        discModalState.scope = elScope.value;
+        discModalState.sys = 'ALL';
+        discModalState.subsys = 'ALL';
+        populateDiscSysDropdowns();
+        renderDiscModalTable();
+    });
+    if (elSys) elSys.addEventListener('change', () => {
+        discModalState.sys = elSys.value;
+        discModalState.subsys = 'ALL';
+        populateDiscSubsysDropdown();
+        renderDiscModalTable();
+    });
+    if (elSubsys) elSubsys.addEventListener('change', () => {
+        discModalState.subsys = elSubsys.value;
+        renderDiscModalTable();
+    });
+    if (elItr) elItr.addEventListener('change', () => {
+        discModalState.itrStatus = elItr.value;
+        renderDiscModalTable();
+    });
+    if (elSearch) elSearch.addEventListener('input', () => {
+        discModalState.search = elSearch.value.trim().toLowerCase();
+        renderDiscModalTable();
+    });
+    if (btnExport) btnExport.addEventListener('click', exportDiscSubsysToExcel);
+}
+
+function getDiscBaseByScope() {
+    return discModalState.allItems.filter(item => {
+        if (discModalState.scope !== 'ALL') {
+            const key = String(item.sub || item.sys || '').trim().toUpperCase();
+            if (!key.startsWith(discModalState.scope)) return false;
+        }
+        return true;
+    });
+}
+
+function populateDiscSysDropdowns() {
+    const base = getDiscBaseByScope();
+    const elSys = document.getElementById('mdl-filter-sys');
+    if (elSys) {
+        const systems = Array.from(new Set(base.map(i => i.sys).filter(Boolean))).sort();
+        if (discModalState.sys !== 'ALL' && !systems.includes(discModalState.sys)) {
+            discModalState.sys = 'ALL';
+            discModalState.subsys = 'ALL';
+        }
+        elSys.innerHTML = `<option value="ALL">All Systems (${systems.length})</option>` +
+            systems.map(s => `<option value="${s}" ${discModalState.sys === s ? 'selected' : ''}>${s}</option>`).join('');
+    }
+    populateDiscSubsysDropdown();
+}
+
+function populateDiscSubsysDropdown() {
+    let base = getDiscBaseByScope();
+    if (discModalState.sys !== 'ALL') {
+        base = base.filter(i => i.sys === discModalState.sys);
+    }
+    const elSubsys = document.getElementById('mdl-filter-subsys');
+    if (elSubsys) {
+        const subs = Array.from(new Set(base.map(i => i.sub).filter(Boolean))).sort();
+        if (discModalState.subsys !== 'ALL' && !subs.includes(discModalState.subsys)) {
+            discModalState.subsys = 'ALL';
+        }
+        elSubsys.innerHTML = `<option value="ALL">All SubSystems (${subs.length})</option>` +
+            subs.map(s => `<option value="${s}" ${discModalState.subsys === s ? 'selected' : ''}>${s}</option>`).join('');
+    }
+}
+
+function renderDiscModalTable() {
+    let list = getDiscBaseByScope();
+
+    if (discModalState.sys !== 'ALL') {
+        list = list.filter(i => i.sys === discModalState.sys);
+    }
+    if (discModalState.subsys !== 'ALL') {
+        list = list.filter(i => i.sub === discModalState.subsys);
+    }
+    if (discModalState.itrStatus !== 'ALL') {
+        const st = discModalState.itrStatus;
+        list = list.filter(i => {
+            const d = i.data.i_d || 0;
+            const t = i.data.i_t || 0;
+            if (st === 'DONE') return t > 0 && d === t;
+            if (st === 'HAS_DONE') return d > 0;
+            if (st === 'IN_PROGRESS') return t > 0 && d > 0 && d < t;
+            if (st === 'NOT_STARTED') return t > 0 && d === 0;
+            if (st === 'INCOMPLETE') return t > 0 && d < t;
+            if (st === 'HAS_ITR') return t > 0;
+            if (st === 'NO_ITR') return t === 0;
+            return true;
+        });
+    }
+    if (discModalState.search) {
+        const q = discModalState.search;
+        list = list.filter(i =>
+            String(i.sys || '').toLowerCase().includes(q) ||
+            String(i.sub || '').toLowerCase().includes(q) ||
+            String(i.desc || '').toLowerCase().includes(q)
+        );
+    }
+
+    discModalState.filteredItems = list;
+
+    // Recalculate Top 4 Summary Boxes based on filtered subsystems
+    let itrT = 0, itrD = 0, paT = 0, paD = 0, pbT = 0, pbD = 0, dacT = 0, dacD = 0;
+    list.forEach(item => {
+        itrT += (item.data.i_t || 0);
+        itrD += (item.data.i_d || 0);
+        paT += (item.data.pa_t || 0);
+        paD += (item.data.pa_d || 0);
+        pbT += (item.data.pb_t || 0);
+        pbD += (item.data.pb_d || 0);
+        dacT += 1;
+        if (item.subDacDone) dacD += 1;
+    });
+
+    const fPct = (d, t) => t > 0 ? ((d / t) * 100).toFixed(1) + '%' : '0.0%';
+    document.getElementById('mdl-itra').innerHTML = `${itrD.toLocaleString()} / ${itrT.toLocaleString()} <span style="font-size:1rem; color:${itrD === itrT && itrT > 0 ? '#10b981' : '#ef4444'}; font-weight:700;">${fPct(itrD, itrT)}</span>`;
+    document.getElementById('mdl-puncha').innerHTML = `${paD.toLocaleString()} / ${paT.toLocaleString()} <span style="font-size:1rem; color:${paD === paT && paT > 0 ? '#10b981' : '#ef4444'}; font-weight:700;">${fPct(paD, paT)}</span>`;
+    document.getElementById('mdl-punchb').innerHTML = `${pbD.toLocaleString()} / ${pbT.toLocaleString()} <span style="font-size:1rem; color:${pbD === pbT && pbT > 0 ? '#10b981' : '#f59e0b'}; font-weight:700;">${fPct(pbD, pbT)}</span>`;
+    document.getElementById('mdl-dac').innerHTML = `${dacD.toLocaleString()} / ${dacT.toLocaleString()} <span style="font-size:1rem; color:${dacD === dacT && dacT > 0 ? '#10b981' : '#ef4444'}; font-weight:700;">${fPct(dacD, dacT)}</span>`;
+
+    // Wire Top Punch A / Punch B boxes to open Punch Modal for this Discipline & active Scope/System
+    const boxPa = document.getElementById('mdl-puncha')?.parentElement;
+    if (boxPa) {
+        boxPa.style.cursor = 'pointer';
+        boxPa.title = `Click to inspect Punch Cat A for ${discModalState.disc}`;
+        boxPa.onclick = () => {
+            openPunchModal('ALL', 'A', discModalState.scope, discModalState.sys);
+            currentPunchDiscFilter = discModalState.disc;
+            if (discModalState.subsys !== 'ALL') {
+                currentPunchSubsys = discModalState.subsys;
+                populatePunchSubsysDropdown();
+            }
+            refreshPunchModalData();
+        };
+    }
+    const boxPb = document.getElementById('mdl-punchb')?.parentElement;
+    if (boxPb) {
+        boxPb.style.cursor = 'pointer';
+        boxPb.title = `Click to inspect Punch Cat B for ${discModalState.disc}`;
+        boxPb.onclick = () => {
+            openPunchModal('ALL', 'B', discModalState.scope, discModalState.sys);
+            currentPunchDiscFilter = discModalState.disc;
+            if (discModalState.subsys !== 'ALL') {
+                currentPunchSubsys = discModalState.subsys;
+                populatePunchSubsysDropdown();
+            }
+            refreshPunchModalData();
+        };
+    }
+
+    const totalAll = discModalState.allItems.length;
+    const countLabel = (list.length === totalAll) ? `${totalAll}` : `${list.length} / ${totalAll}`;
+    document.getElementById('mdl-table-title').innerHTML = `Subsystem Summary (${countLabel}) <span style="font-size:0.75rem; color:#64748b; font-weight:400; margin-left:8px;">Click ITR / Punch / DAC counts to view details</span>`;
+
+    const tbody = document.getElementById('mdl-tbody');
+    if (!tbody) return;
+    if (list.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="10" style="text-align:center; padding: 2.5rem; color: #64748b; font-style: italic;">No subsystems match the selected filters.</td></tr>';
+        return;
+    }
+
+    const discName = discModalState.disc;
+    const discShort = discName.substring(0, 4);
+
+    const fmtItrLink = (sub, d, t) => {
+        if (t <= 0) return '-';
+        const isAllDone = d === t;
+        const st = isAllDone
+            ? 'background:#dcfce7; color:#15803d; border:1px solid #86efac;'
+            : (d > 0 ? 'background:#e0f2fe; color:#0369a1; border:1px solid #7dd3fc;' : 'background:#f1f5f9; color:#334155; border:1px solid #cbd5e1;');
+        return `<button type="button" onclick="openChecksheetDetail('${sub}', '${discName}')" title="Click to view ITR-A checksheets for ${sub} (${discName})" style="${st} padding: 2px 8px; border-radius: 6px; font-size: 0.78rem; font-weight: 700; cursor: pointer;">${d}/${t}</button>`;
+    };
+
+    const fmtPunchLink = (sub, d, t, cat) => {
+        if (t <= 0) return '-';
+        const isAllClosed = d === t;
+        const openCnt = t - d;
+        let st = 'background:#dcfce7; color:#15803d; border:1px solid #86efac;';
+        if (!isAllClosed) {
+            st = cat === 'A'
+                ? 'background:#fee2e2; color:#b91c1c; border:1px solid #fca5a5;'
+                : 'background:#fef3c7; color:#b45309; border:1px solid #fcd34d;';
+        }
+        return `<button type="button" onclick="openSubsysPunchDetail('${sub}', '${discName}', '${cat}')" title="Click to view Punch Cat ${cat} details for ${sub} (${discName}) — ${openCnt} Open" style="${st} padding: 2px 8px; border-radius: 6px; font-size: 0.78rem; font-weight: 700; cursor: pointer;">${d}/${t}</button>`;
+    };
+
+    let subTbodyHtml = '';
+    let idx = 1;
+    list.forEach(item => {
+        const subScope = item.sub.toUpperCase().startsWith('CLQM') ? 'CLQM' : (item.sub.toUpperCase().startsWith('CLQU') ? 'CLQU' : 'ALL');
+        const dacHtml = `<button type="button" onclick="openCertModal('DAC', '${discShort}', '${subScope}', '${item.sys}')" title="Click to inspect DAC Certificates for ${item.sys} (${discShort})" style="background:transparent; border:none; cursor:pointer; font-size:0.85rem; font-weight:700; color:${item.subDacDone ? '#10b981' : '#64748b'};">${item.subDacDone ? '&#10004;' : '-'}</button>`;
+
+        subTbodyHtml += `
+            <tr>
+                <td>${idx++}</td>
+                <td>${item.sys}</td>
+                <td><b>${item.sub}</b></td>
+                <td>${item.desc}</td>
+                <td style="font-weight:600; font-family:monospace; color:#0284c7; text-align:center;">${formatSkylineDate(item.skyDate)}</td>
+                <td>${fmtItrLink(item.sub, item.data.i_d, item.data.i_t)}</td>
+                <td><span style="font-weight:700; color: ${item.subPct === '100.0' ? '#10b981' : (item.subPct === '0.0' ? '#ef4444' : '#0284c7')}">${item.subPct}%</span></td>
+                <td>${fmtPunchLink(item.sub, item.data.pa_d, item.data.pa_t, 'A')}</td>
+                <td>${fmtPunchLink(item.sub, item.data.pb_d, item.data.pb_t, 'B')}</td>
+                <td>${dacHtml}</td>
+            </tr>
+        `;
+    });
+
+    tbody.innerHTML = subTbodyHtml;
+}
+
+function exportDiscSubsysToExcel() {
+    if (typeof XLSX === 'undefined') {
+        alert("Excel library not loaded.");
+        return;
+    }
+    const list = discModalState.filteredItems || [];
+    if (list.length === 0) {
+        alert("No subsystems to export.");
+        return;
+    }
+    const rows = [['#', 'SYSTEM', 'SUBSYSTEM', 'DESCRIPTION', 'SKYLINE DATE', 'ITR DONE', 'ITR TOTAL', '%ITR', 'PUNCH A', 'PUNCH B', 'DAC']];
+    list.forEach((item, i) => {
+        rows.push([
+            i + 1,
+            item.sys,
+            item.sub,
+            item.desc,
+            formatSkylineDate(item.skyDate),
+            item.data.i_d || 0,
+            item.data.i_t || 0,
+            item.subPct + '%',
+            item.data.pa_t > 0 ? `${item.data.pa_d}/${item.data.pa_t}` : '-',
+            item.data.pb_t > 0 ? `${item.data.pb_d}/${item.data.pb_t}` : '-',
+            item.subDacDone ? 'CLOSED' : 'OPEN'
+        ]);
+    });
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Subsystem_Summary");
+    XLSX.writeFile(wb, `LQP_${discModalState.disc}_Subsystems_${new Date().toISOString().slice(0, 10)}.xlsx`);
+}
+
 function openDisciplineModal(disc) {
     const gd = window.GLOBAL_MC_DATA;
     if (!gd) return;
+    bindDiscModalEventsOnce();
 
     // Show modal
     document.getElementById('disc-modal').style.display = 'flex';
     document.getElementById('modal-title').innerHTML = `Discipline: ${disc} <span style="font-size: 0.8rem; font-weight: 400; color: #94a3b8; margin-left: 10px;">Whole Project</span>`;
     document.getElementById('mdl-chart-title').innerText = `S-Curve ITR-A - Whole Project - Discipline ${disc}`;
 
-    // Calculate Modal 4 Boxes
-    let itrT = 0, itrD = 0, paT = 0, paD = 0, pbT = 0, pbD = 0, dacT = 0, dacD = 0;
-    
-    let subTbodyHtml = '';
-    let idx = 1;
-    let rowCount = 0;
+    let itrT = 0;
     let modalItems = [];
 
     Object.keys(gd.matrix).forEach(sys => {
@@ -2061,24 +2332,12 @@ function openDisciplineModal(disc) {
             // Show subsystem if it has ANY data for this discipline (ITR or Punch)
             const hasData = data.i_t > 0 || data.pa_t > 0 || data.pb_t > 0;
             if (!hasData) return;
-            
-            rowCount++;
 
             itrT += data.i_t;
-            itrD += data.i_d;
-            paT += data.pa_t;
-            paD += data.pa_d;
-            pbT += data.pb_t;
-            pbD += data.pb_d;
-            
+
             // DAC subsystem check (Assume CSSC is Subsystem DAC)
             const csscObj = gd.sumCssc[sub];
-            dacT += 1;
-            let subDacDone = false;
-            if (csscObj && csscObj.d > 0) {
-                dacD += 1;
-                subDacDone = true;
-            }
+            const subDacDone = !!(csscObj && csscObj.d > 0);
 
             const subPct = data.i_t > 0 ? ((data.i_d / data.i_t) * 100).toFixed(1) : '0.0';
             const desc = gd.sysDescMap[sub] || '';
@@ -2107,34 +2366,24 @@ function openDisciplineModal(disc) {
         return a.sub.localeCompare(b.sub);
     });
 
-    const fmtCell = (d, t) => t > 0 ? `${d}/${t}` : '-';
+    // Reset filter state & UI controls
+    discModalState.disc = disc;
+    discModalState.allItems = modalItems;
+    discModalState.scope = 'ALL';
+    discModalState.sys = 'ALL';
+    discModalState.subsys = 'ALL';
+    discModalState.itrStatus = 'ALL';
+    discModalState.search = '';
 
-    modalItems.forEach(item => {
-        subTbodyHtml += `
-            <tr>
-                <td>${idx++}</td>
-                <td>${item.sys}</td>
-                <td><b>${item.sub}</b></td>
-                <td>${item.desc}</td>
-                <td style="font-weight:600; font-family:monospace; color:#0284c7; text-align:center;">${formatSkylineDate(item.skyDate)}</td>
-                <td>${fmtCell(item.data.i_d, item.data.i_t)}</td>
-                <td><span style="color: ${item.subPct === '100.0' ? '#10b981' : (item.subPct === '0.0' ? '#ef4444' : '#0f172a')}">${item.subPct}%</span></td>
-                <td>${fmtCell(item.data.pa_d, item.data.pa_t)}</td>
-                <td>${fmtCell(item.data.pb_d, item.data.pb_t)}</td>
-                <td>${item.subDacDone ? '<span style="color:#10b981;">&#10004;</span>' : '-'}</td>
-            </tr>
-        `;
-    });
+    const elScope = document.getElementById('mdl-filter-scope');
+    const elItr = document.getElementById('mdl-filter-itr');
+    const elSearch = document.getElementById('mdl-search-input');
+    if (elScope) elScope.value = 'ALL';
+    if (elItr) elItr.value = 'ALL';
+    if (elSearch) elSearch.value = '';
 
-    document.getElementById('mdl-tbody').innerHTML = subTbodyHtml;
-    document.getElementById('mdl-table-title').innerHTML = `Subsystem Summary (${rowCount}) <span style="font-size:0.75rem; color:#64748b; font-weight:400; margin-left:10px;">Click row to view details (Coming soon)</span>`;
-    
-    // Update Top Boxes HTML
-    const fPct = (d, t) => t > 0 ? ((d/t)*100).toFixed(1) + '%' : '0.0%';
-    document.getElementById('mdl-itra').innerHTML = `${itrD.toLocaleString()} / ${itrT.toLocaleString()} <span style="font-size:1rem; color:${itrD===itrT && itrT>0 ? '#10b981' : '#ef4444'}; font-weight:700;">${fPct(itrD, itrT)}</span>`;
-    document.getElementById('mdl-puncha').innerHTML = `${paD.toLocaleString()} / ${paT.toLocaleString()} <span style="font-size:1rem; color:#ef4444; font-weight:700;">${fPct(paD, paT)}</span>`;
-    document.getElementById('mdl-punchb').innerHTML = `${pbD.toLocaleString()} / ${pbT.toLocaleString()} <span style="font-size:1rem; color:#ef4444; font-weight:700;">${fPct(pbD, pbT)}</span>`;
-    document.getElementById('mdl-dac').innerHTML = `${dacD.toLocaleString()} / ${dacT.toLocaleString()} <span style="font-size:1rem; color:#ef4444; font-weight:700;">${fPct(dacD, dacT)}</span>`;
+    populateDiscSysDropdowns();
+    renderDiscModalTable();
 
     // Modal Chart
     const pMap = gd.skyData.discPlanByWeek[disc] || {};
