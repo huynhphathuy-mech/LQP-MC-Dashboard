@@ -467,12 +467,19 @@
             const bust = `t=${Date.now()}`;
             const isLocalFile = !window.location.protocol.startsWith("http");
             const mainBase = isLocalFile ? LIVE_URL : "";
-            const rawManualUrl = `https://raw.githubusercontent.com/${activeGhConfig.owner}/${activeGhConfig.repo}/${activeGhConfig.branch}/manual_data.json?${bust}`;
+            const rawBase = `https://raw.githubusercontent.com/${activeGhConfig.owner}/${activeGhConfig.repo}/${activeGhConfig.branch}/`;
 
-            const [resMain, resManRaw] = await Promise.all([
-                fetch(`${mainBase}data.json?${bust}`, { cache: "no-store" }),
-                fetch(rawManualUrl, { cache: "no-store" }).catch(() => null)
+            // Prefer raw.githubusercontent.com FIRST so data updates IMMEDIATELY after push
+            // (zero wait for GitHub Pages rebuild/CDN cache), with fallback to GitHub Pages.
+            const [resMainRaw, resManRaw] = await Promise.all([
+                fetch(`${rawBase}data.json?${bust}`, { cache: "no-store" }).catch(() => null),
+                fetch(`${rawBase}manual_data.json?${bust}`, { cache: "no-store" }).catch(() => null)
             ]);
+
+            let resMain = (resMainRaw && resMainRaw.ok) ? resMainRaw : null;
+            if (!resMain) {
+                resMain = await fetch(`${mainBase}data.json?${bust}`, { cache: "no-store" });
+            }
             if (!resMain.ok) throw new Error(`HTTP ${resMain.status}`);
             const mainJson = await resMain.json();
             if (!mainJson || !mainJson.data) throw new Error("Invalid data.json format");
@@ -1124,10 +1131,11 @@
             window.__enhWrappedApply = true;
             const origApply = window.applyLoadedData;
             window.applyLoadedData = function (dataObj, updateDateStr) {
-                if (window.PRELOADED_MC_DATA && window.PRELOADED_MC_DATA.updatedAt && !latestUpdatedAt) {
+                if (updateDateStr && String(updateDateStr).includes("(VN)")) {
+                    latestUpdatedAt = updateDateStr;
+                } else if (window.PRELOADED_MC_DATA && window.PRELOADED_MC_DATA.updatedAt && !latestUpdatedAt) {
                     latestUpdatedAt = window.PRELOADED_MC_DATA.updatedAt;
-                }
-                if (updateDateStr && !latestUpdatedAt) {
+                } else if (updateDateStr && !latestUpdatedAt) {
                     latestUpdatedAt = updateDateStr;
                 }
                 origApply.call(this, dataObj, updateDateStr);
