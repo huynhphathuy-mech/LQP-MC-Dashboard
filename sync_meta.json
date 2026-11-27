@@ -1,6 +1,6 @@
 {
-  "updateDate": "2026-11-26",
-  "updatedAt": "2026-11-26 17:53:15 (VN)",
+  "updateDate": "2026-11-27",
+  "updatedAt": "2026-11-27 08:13:10 (VN)",
   "syncSource": "Auto-Sync PTSC PMS",
   "summary": {
     "itrA": {
@@ -20,7 +20,7 @@
       "total": 1258
     },
     "punchC": {
-      "done": 556,
+      "done": 560,
       "total": 855
     },
     "dac": {
