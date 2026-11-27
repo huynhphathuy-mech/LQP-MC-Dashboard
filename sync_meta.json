@@ -1,23 +1,23 @@
 {
   "updateDate": "2026-11-27",
-  "updatedAt": "2026-11-27 13:32:55 (VN)",
+  "updatedAt": "2026-11-27 18:28:48 (VN)",
   "syncSource": "Auto-Sync PTSC PMS",
   "summary": {
     "itrA": {
-      "done": 2047,
+      "done": 2058,
       "total": 15326
     },
     "itrB": {
-      "done": 6,
+      "done": 17,
       "total": 4373
     },
     "punchA": {
       "done": 144,
-      "total": 200
+      "total": 199
     },
     "punchB": {
       "done": 627,
-      "total": 1262
+      "total": 1263
     },
     "punchC": {
       "done": 564,
