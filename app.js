@@ -236,11 +236,11 @@ async function loadDefaultData() {
 
     // 1. Try to fetch data.json (works on GitHub Pages or local HTTP server)
     try {
-        const response = await fetch('data.json');
+        const response = await fetch('data.json?t=' + Date.now(), { cache: 'no-store' });
         if (response.ok) {
             const jsonData = await response.json();
             if (jsonData && jsonData.data) {
-                applyLoadedData(jsonData.data, jsonData.updateDate);
+                applyLoadedData(jsonData.data, jsonData.updatedAt || jsonData.updateDate);
                 saveToDB('global_mc_data', jsonData);
                 loaded = true;
                 return;
